@@ -301,7 +301,6 @@ static void init(int width, int height, int window_scale, bool full_screen)
 	#ifdef __EMSCRIPTEN__
 	imgui_clipboard_init();
 	#endif
-
 	
 	init_threads();
 }
