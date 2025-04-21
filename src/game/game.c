@@ -39,7 +39,6 @@
 #define PARTICLE_FACES 30
 #define CONSTRAINT_FACES 64
 #define SUB_CYCLES 1
-#define THREAD_COUNT 16
 
 static GLFWwindow *window;
 static ImGuiIO *ioptr;
@@ -55,14 +54,6 @@ static int num_free_particles;
 #ifndef PI
 #define PI 3.1415926535897932384626433832795f
 #endif
-
-// pthreads
-static pthread_t threads[THREAD_COUNT] = {0};
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t cond_start = PTHREAD_COND_INITIALIZER;
-static pthread_cond_t cond_done = PTHREAD_COND_INITIALIZER;
-static bool running = false;
-static int done_counter = 0;
 
 static LinkConstraint links[MAX_PARTICLES];
 static Particle particles[MAX_PARTICLES];
@@ -175,116 +166,6 @@ static void reset_partition_grid()
 	memset(space_partition_grid, 0, sizeof(SpacePartitionCell) * 50 * 50);
 }
 
-static void* process_space_partition_grid_slice(void *arg)
-{
-	int thread_id = *(int *)arg;
-
-	int matrixWidth = screen_size.x / cellSize;
-	int matrixHeight = screen_size.y / cellSize;
-	
-	int cols_per_thread = matrixWidth / THREAD_COUNT;
-	int extra = matrixWidth % THREAD_COUNT;
-	
-	int start_col = thread_id * cols_per_thread + (thread_id < extra ? thread_id : extra);
-	int cols_this_thread = cols_per_thread + (thread_id < extra ? 1 : 0);
-	int end_col = start_col + cols_this_thread;
-	
-
-	while(true)
-	{
-		pthread_mutex_lock(&mutex);
-		while(!running)
-			pthread_cond_wait(&cond_start, &mutex);
-
-		pthread_mutex_unlock(&mutex);
-
-		for(int c = 0; c < SUB_CYCLES; c++)
-		{
-			for(int j = 0; j < matrixHeight; j++)
-			{
-				for(int i = start_col; i < end_col; i++)
-				{
-					SpacePartitionCell *cell = &space_partition_grid[i][j];
-					vt_enforce_colision_in_space_partition_cell(particles, *cell);
-
-					const int neighbors[3][2] = {{1, 0}, {0, 1}, {1, 1}};
-
-					for (int n = 0; n < 3; n++)
-					{
-						int ni = i + neighbors[n][0];
-						int nj = j + neighbors[n][1];
-
-						if (ni >= matrixWidth || nj >= matrixHeight)
-							continue;
-
-						SpacePartitionCell *neighbor = &space_partition_grid[ni][nj];
-
-						for (int a = 0; a < cell->particleCount; a++)
-						{
-							for (int b = 0; b < neighbor->particleCount; b++)
-							{
-								int idxA = cell->particles[a];
-								int idxB = neighbor->particles[b];
-								vt_resolve_particle_collision(&particles[idxA], &particles[idxB]);
-							}
-						}
-					}
-				}
-			}
-		}
-
-		pthread_mutex_lock(&mutex);
-		done_counter++;
-		if(done_counter == THREAD_COUNT)
-		{
-			pthread_cond_signal(&cond_done);
-		}
-		pthread_mutex_unlock(&mutex);
-	}
-	return NULL;
-}
-
-static void start_processing()
-{
-	reset_partition_grid();
-	build_partition_grid();
-	pthread_mutex_lock(&mutex);
-	running = true;
-	done_counter = 0;
-	pthread_cond_broadcast(&cond_start);
-	pthread_mutex_unlock(&mutex);
-}
-
-static void wait_for_completion()
-{
-	pthread_mutex_lock(&mutex);
-	
-	while(done_counter < THREAD_COUNT)
-	{
-		pthread_cond_wait(&cond_done, &mutex);
-	}
-
-	running = false;
-
-	pthread_mutex_unlock(&mutex);
-}
-
-
-static void init_threads()
-{
-	int matrixWidth = screen_size.x / cellSize;
-	int matrixHeight = screen_size.y / cellSize;
-
-	int start = matrixWidth / THREAD_COUNT;
-
-	static int ids[THREAD_COUNT];
-	for(int i = 0; i < THREAD_COUNT; i++)
-	{
-		ids[i] = i;
-		pthread_create(&threads[i], NULL, process_space_partition_grid_slice, &ids[i]);
-	}
-}
-
 static void init(int width, int height, int window_scale, bool full_screen)
 {
 	screen_size.x = width;
@@ -301,9 +182,6 @@ static void init(int width, int height, int window_scale, bool full_screen)
 	#ifdef __EMSCRIPTEN__
 	imgui_clipboard_init();
 	#endif
-
-	
-	init_threads();
 }
 
 void serialize_level(char *out_buffer, size_t out_size)
@@ -591,7 +469,6 @@ static void constraint_particles_to_screen()
 
 static void enforce_collisions_using_space_partitioning()
 {
-	
 	int matrixWidth = screen_size.x / cellSize;
 	int matrixHeight = screen_size.y / cellSize;
 	
@@ -691,8 +568,7 @@ static void process_state_running()
 			vt_enforce_collision_between_particles(particles, num_particles);
 		}
 	} else {
-		start_processing();
-		wait_for_completion();
+		enforce_collisions_using_space_partitioning();
 	}
 
 }
