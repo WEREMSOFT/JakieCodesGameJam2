@@ -5,7 +5,7 @@
 #include <string.h>
 #include <math.h>
 #include <sys/param.h>
-// #include <pthread.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <soloud_c.h>
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
@@ -303,7 +303,7 @@ static void init(int width, int height, int window_scale, bool full_screen)
 	#endif
 
 	
-	// init_threads();
+	init_threads();
 }
 
 void serialize_level(char *out_buffer, size_t out_size)
