@@ -1,8 +1,6 @@
 #include "verlet.h"
 #include "imgui_vector_math.h"
 
-// #define TERMINAL_VELOCITY 2.
-
 void vt_update_particles(Particle particles[], int particleCount, float deltaTime)
 {
 	float dtSqr = deltaTime * deltaTime;
@@ -18,11 +16,6 @@ void vt_update_particles(Particle particles[], int particleCount, float deltaTim
 		ImVec2 velocity = ig_vec2_diff(p->position, p->prevPosition);
 
 		float vel_scalar = ig_vec2_length(velocity);
-
-		// if(vel_scalar > TERMINAL_VELOCITY)
-		// {
-		// 	velocity = ig_vec2_scale(ig_vec2_norm(velocity), TERMINAL_VELOCITY);
-		// }
 
 		p->position = ig_vec2_add(
 			ig_vec2_add(p->position, velocity),
