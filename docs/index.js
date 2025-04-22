@@ -31,7 +31,7 @@ if (ENVIRONMENT_IS_NODE) {
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /tmp/tmpikmhk1bk.js
+// include: /tmp/tmpim_hji5c.js
 
   Module['expectedDataFileDownloads'] ??= 0;
   Module['expectedDataFileDownloads']++;
@@ -212,21 +212,21 @@ Module['FS_createPath']("/", "assets", true, true);
 
   })();
 
-// end include: /tmp/tmpikmhk1bk.js
-// include: /tmp/tmpntfntrko.js
+// end include: /tmp/tmpim_hji5c.js
+// include: /tmp/tmp_w5tj1cp.js
 
     // All the pre-js content up to here must remain later on, we need to run
     // it.
     if (Module['$ww'] || (typeof ENVIRONMENT_IS_PTHREAD != 'undefined' && ENVIRONMENT_IS_PTHREAD)) Module['preRun'] = [];
     var necessaryPreJSTasks = Module['preRun'].slice();
-  // end include: /tmp/tmpntfntrko.js
-// include: /tmp/tmpwntw30v5.js
+  // end include: /tmp/tmp_w5tj1cp.js
+// include: /tmp/tmp0zhdaoc5.js
 
     if (!Module['preRun']) throw 'Module.preRun should exist because file support used it; did a pre-js delete it?';
     necessaryPreJSTasks.forEach((task) => {
       if (Module['preRun'].indexOf(task) < 0) throw 'All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?';
     });
-  // end include: /tmp/tmpwntw30v5.js
+  // end include: /tmp/tmp0zhdaoc5.js
 
 
 // Sometimes an existing Module object exists with properties
@@ -9742,7 +9742,7 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('fetchSettings');
 }
 var ASM_CONSTS = {
-  1109960: () => { document.addEventListener('paste', function(e) { const text = e.clipboardData.getData('text/plain'); const len = lengthBytesUTF8(text) + 1; const ptr = _malloc(len); stringToUTF8(text, ptr, len); Module._imgui_clipboard_set_from_js(ptr); _free(ptr); }); }
+  1109896: () => { document.addEventListener('paste', function(e) { const text = e.clipboardData.getData('text/plain'); const len = lengthBytesUTF8(text) + 1; const ptr = _malloc(len); stringToUTF8(text, ptr, len); Module._imgui_clipboard_set_from_js(ptr); _free(ptr); }); }
 };
 function ImGui_ImplGlfw_EmscriptenOpenURL(url) { url = url ? UTF8ToString(url) : null; if (url) window.open(url, '_blank'); }
 var wasmImports = {

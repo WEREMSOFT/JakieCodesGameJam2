@@ -220,7 +220,6 @@ void serialize_level(char *out_buffer, size_t out_size)
 		ptr += written;
 		out_size -= written;
 	}
-	printf("%s\n", out_buffer);
 }
 
 int deserialize_level(const char *input)

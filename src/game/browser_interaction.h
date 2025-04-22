@@ -3,8 +3,10 @@
 #include <emscripten/html5.h>
 #include <string.h>
 
+#define MAX_INTERCHANGE_BUFFER 8000
+
 const char* get_browser_url() {
-    static char url_buffer[1024];
+    static char url_buffer[MAX_INTERCHANGE_BUFFER];
     const char* url = emscripten_run_script_string("window.location.href");
     strncpy(url_buffer, url, sizeof(url_buffer));
     return url_buffer;
@@ -12,7 +14,7 @@ const char* get_browser_url() {
 
 void set_browser_url(const char* new_url) {
     // Usa replaceState para cambiar la URL sin recargar la página
-    char script[1024];
+    char script[MAX_INTERCHANGE_BUFFER];
     snprintf(script, sizeof(script),
              "window.parent.history.replaceState(null, '', '%s');", new_url);
     emscripten_run_script(script);
@@ -27,16 +29,16 @@ void clear_output_console() {
     emscripten_run_script("document.getElementById('output').value = '';");
 }
 
-char url[4096];
+char url[MAX_INTERCHANGE_BUFFER];
 
 void save_level_to_url(const char* level_data)
 {
-	char js[4096];
+	char js[MAX_INTERCHANGE_BUFFER];
      snprintf(js, sizeof(js),
         "window.location.hash = '#'+btoa(`%s`)",
         level_data);
     emscripten_run_script(js);
-	printf("You can share your dessign with this url: %s\n", get_browser_url());
+	printf("%s\n", get_browser_url());
 }
 
 void load_level_from_url(char* out_buffer, int buffer_size)
@@ -45,7 +47,7 @@ void load_level_from_url(char* out_buffer, int buffer_size)
         "(() => {"
         " if (!window.location.hash) return '';"
         " try {"
-        "   return decodeURIComponent(atob(window.location.hash.slice(1)));"
+        "   return atob(window.location.hash.slice(1));"
         " } catch(e) { return ''; }"
         "})()"
     );
