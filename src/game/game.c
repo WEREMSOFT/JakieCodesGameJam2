@@ -568,14 +568,139 @@ static void draw_plasma_ball(float delta_time, float base_radious)
 	draw_lightning(ig_vec2_scale(screen_size, 0.5), radiouses[2]);
 }
 
+typedef struct EnergyOutput
+{
+	float linked_particles;
+	float free_particles;
+} EnergyOutput;
+
+EnergyOutput calculate_kinetic_energy(Particle* particles, LinkConstraint* constraints, int numParticles, int numConstraints, float deltaT) {
+    EnergyOutput returnValue = {0};
+
+    // Calcular la energía cinética de las partículas no linkeadas y las linkeadas
+    for (int i = 0; i < numParticles; i++) {
+        // Calcular la velocidad
+        ImVec2 velocity = {particles[i].position.x - particles[i].prevPosition.x, 
+                           particles[i].position.y - particles[i].prevPosition.y};
+        float speed = sqrtf(velocity.x * velocity.x + velocity.y * velocity.y);
+
+        // Energía cinética = 1/2 * masa * velocidad^2
+        float kineticEnergy = 0.5f * particles[i].mass * speed * speed;
+
+        // Verificar si la partícula está linkeada
+        bool isLinked = false;
+        for (int j = 0; j < numConstraints; j++) {
+            if (constraints[j].particleA == i || constraints[j].particleB == i) {
+                isLinked = true;
+                break;
+            }
+        }
+
+        if (isLinked) {
+            // Sumar a la energía de las partículas linkeadas
+            returnValue.linked_particles += kineticEnergy;
+        } else {
+            // Sumar a la energía de las partículas no linkeadas
+            returnValue.free_particles += kineticEnergy;
+        }
+    }
+
+    return returnValue;
+}
+
+#define MAX_HISTORY 300 
+
+static float energyLinkedHistory[MAX_HISTORY] = {0};
+static float energyUnlinkedHistory[MAX_HISTORY] = {0};
+static int historyIndex = 0;
+static bool historyWrapped = true;
+
+float get_max_value(const float* data, int count) {
+    float max = data[0];
+    for (int i = 1; i < count; i++) {
+        if (data[i] > max) {
+            max = data[i];
+        }
+    }
+    return max;
+}
+
+void draw_energy_graph() {
+    int count = historyWrapped ? MAX_HISTORY : historyIndex;
+
+
+    float maxLinked = get_max_value(energyLinkedHistory, count);
+    float maxUnlinked = get_max_value(energyUnlinkedHistory, count);
+    float scaleMax = fmaxf(maxLinked, maxUnlinked) * 1.1f;
+
+	char title_unlinked[100] = {0};
+
+	sprintf(title_unlinked, "Energy Collected %f", energyLinkedHistory[count-1]);
+
+    if (igBegin("Energía Cinética vs Tiempo", NULL, 0)) {
+        igText("Gráfico de líneas (últimos %d frames)", count);
+
+		igPlotLines_FloatPtr(
+            title_unlinked,
+            energyLinkedHistory,
+            count,
+            historyWrapped ? historyIndex : 0,
+            NULL,
+            0,
+            scaleMax,
+            (ImVec2){400, 150},
+            sizeof(float)
+        );
+		
+
+		igPlotLines_FloatPtr(
+				"Energy Available",
+				energyUnlinkedHistory,
+				count,
+				historyWrapped ? historyIndex : 0,
+				NULL,
+				0,
+				scaleMax,
+				(ImVec2){400, 150},
+				sizeof(float)
+			);
+
+		}
+        igEnd();
+}
+
+void update_energy_history(float linked, float unlinked) {
+    energyLinkedHistory[historyIndex] = linked;
+    energyUnlinkedHistory[historyIndex] = unlinked;
+
+    historyIndex++;
+    if (historyIndex >= MAX_HISTORY) {
+        historyIndex = 0;
+        historyWrapped = true;
+    }
+}
+
+void update_energy_display(Particle* particles, LinkConstraint* constraints, int numParticles, int numConstraints, float deltaT) {
+    float linked = 0.0f, unlinked = 0.0f;
+    
+	EnergyOutput eo = calculate_kinetic_energy(particles, links, num_particles, num_links, deltaT);
+	
+    update_energy_history(eo.linked_particles, eo.free_particles);
+    draw_energy_graph();
+}
 static void process_state_running()
 {
 	ImVec2 mouse_pos;
 	igGetMousePos(&mouse_pos);
 	
 	float delta_time = igGetIO()->DeltaTime;
-	
-	draw_plasma_ball(delta_time, num_particles + 10);
+
+	EnergyOutput eo = calculate_kinetic_energy(particles, links, num_particles, num_links, delta_time);
+
+	update_energy_display(particles, links, num_particles, num_links, delta_time);
+
+
+	draw_plasma_ball(delta_time, eo.linked_particles);
 	static float elapsed_time = 0;
 
 	elapsed_time += delta_time;

@@ -59,7 +59,6 @@ void vt_enforce_far_constraints(Particle particles[], int numParticles, Unidirec
 	}
 }
 
-
 void vt_enforce_near_constraints(Particle particles[], int numParticles, UnidirectionalConstraint nearConstraints[], int numConstraints)
 {
 	for(int i = 0; i < numConstraints; i++)
