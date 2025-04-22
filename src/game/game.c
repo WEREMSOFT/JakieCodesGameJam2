@@ -36,7 +36,7 @@
 #include "verlet.h"
 #include "imgui_vector_math.h"
 #include "energy_graph.h"
-
+#include "browser_interaction.h"
 
 #define PARTICLE_FACES 30
 #define CONSTRAINT_FACES 64
@@ -65,7 +65,7 @@ static UnidirectionalConstraint near_constraints[MAX_PARTICLES];
 static GameStateEnum state = GAME_STATE_RUNNING;
 static ImDrawList *draw_list;
 static ImVec2 screen_size = {};
-#define MAX_LEVEL_TEXT 100000
+#define MAX_LEVEL_TEXT 1000000
 static char levelTextBuffer[MAX_LEVEL_TEXT] = "";
 
 static SpacePartitionCell space_partition_grid[50][50] = {0};
@@ -196,13 +196,14 @@ void serialize_level(char *out_buffer, size_t out_size)
 	for (int i = 0; i < num_particles; i++)
 	{
 		const Particle *p = &particles[i];
+		if(!particles[i].enabled) continue;
 		written = snprintf(ptr, out_size,
-						   "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %u %d\n",
+						   "%d %.0f %.0f %.0f %.0f %.0f %.0f %u\n",
+						   i,
 						   p->position.x, p->position.y,
 						   p->prevPosition.x, p->prevPosition.y,
-						   p->acceleration.x, p->acceleration.y,
 						   p->mass, p->radious,
-						   p->color, p->enabled ? 1 : 0);
+						   p->color);
 		ptr += written;
 		out_size -= written;
 	}
@@ -215,10 +216,11 @@ void serialize_level(char *out_buffer, size_t out_size)
 	{
 		const LinkConstraint *c = &links[i];
 		written = snprintf(ptr, out_size,
-						   "%d %d %.3f\n", c->particleA, c->particleB, c->length);
+						   "%d %d %.0f\n", c->particleA, c->particleB, c->length);
 		ptr += written;
 		out_size -= written;
 	}
+	printf("%s\n", out_buffer);
 }
 
 int deserialize_level(const char *input)
@@ -251,16 +253,18 @@ int deserialize_level(const char *input)
 		}
 		else if (mode == 1 && num_particles < MAX_PARTICLES)
 		{
-			Particle *p = &particles[num_particles];
+			Particle p = {0};
 			int enabled_int;
-			sscanf(buffer, "%f %f %f %f %f %f %f %f %u %d",
-				   &p->position.x, &p->position.y,
-				   &p->prevPosition.x, &p->prevPosition.y,
-				   &p->acceleration.x, &p->acceleration.y,
-				   &p->mass, &p->radious,
-				   &p->color, &enabled_int);
-			p->enabled = (enabled_int != 0);
-			num_particles++;
+			int index = -1;
+			sscanf(buffer, "%i %f %f %f %f %f %f %u",
+				&index,
+				&p.position.x, &p.position.y,
+				&p.prevPosition.x, &p.prevPosition.y,
+				&p.mass, &p.radious,
+				&p.color);
+			p.enabled = true;
+			particles[index] = p;
+			num_particles = index + 1;
 		}
 		else if (mode == 2 && num_links < MAX_PARTICLES)
 		{
@@ -279,53 +283,21 @@ int deserialize_level(const char *input)
 
 static void export_game(void)
 {
+	#ifdef __EMSCRIPTEN__
+	clear_output_console();
 	serialize_level(levelTextBuffer, MAX_LEVEL_TEXT);
+	save_level_to_url(levelTextBuffer);
+	#endif
 	
-	if (igBeginPopupModal("Import", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-	{
-		igText("Paste here:");
-		igInputTextMultiline("##LevelInput", levelTextBuffer, MAX_LEVEL_TEXT,
-							 (ImVec2){500, 300}, ImGuiInputTextFlags_AllowTabInput, NULL, NULL);
-
-		if (igButton("Ok", (ImVec2){0, 0}))
-		{
-			if (!deserialize_level(levelTextBuffer))
-			{
-				printf("Error deserializing game\n");
-			}
-			igCloseCurrentPopup();
-			state = GAME_STATE_RUNNING;
-			show_import_modal = false;
-		}
-
-		igEndPopup();
-	}
- 	igOpenPopup_Str("Import", 0);
 }
 
 static void import_game(void)
 {
-	if (igBeginPopupModal("Import", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-	{
-		igText("Paste here:");
-		igInputTextMultiline("##LevelInput", levelTextBuffer, MAX_LEVEL_TEXT,
-							 (ImVec2){500, 300}, ImGuiInputTextFlags_AllowTabInput, NULL, NULL);
-
-		if (igButton("Load", (ImVec2){0, 0}))
-		{
-
-			if (!deserialize_level(levelTextBuffer))
-			{
-				printf("Error al parsear json\n");
-			}
-			igCloseCurrentPopup();
-			state = GAME_STATE_RUNNING;
-			show_import_modal = false;
-		}
-
-		igEndPopup();
-	}
- 	igOpenPopup_Str("Import", 0);
+	#ifdef __EMSCRIPTEN__
+	load_level_from_url(levelTextBuffer, MAX_LEVEL_TEXT);
+	deserialize_level(levelTextBuffer);
+	printf("deserialization complete\n");
+	#endif
 }
 
 static bool draw_gui()
@@ -384,11 +356,33 @@ static bool draw_gui()
 			if (igMenuItem_BoolPtr("Inject Particles", "", &inject_particles, true));
 			if (igMenuItem_BoolPtr("Draw Partition Grid", "", &draw_part_grid, true));
 			igSeparator();
+			#ifdef __EMSCRIPTEN__
+			if (igMenuItem_Bool("Write Broser Url", "", false, true))
+			{
+				set_browser_url("?level=3&mode=edit");
+			}
+
+			if (igMenuItem_Bool("Get Broser Url", "", false, true))
+			{
+				printf("%s\n", get_browser_url());
+			}
+
+			if (igMenuItem_Bool("Get Console Text", "", false, true))
+			{
+				clear_output_console();
+				printf("\n##########\n%s\n", get_console_text(levelTextBuffer));
+			}
+
+			igSeparator();
+			#endif
 			if (igMenuItem_Bool("Export Game", "", &draw_part_grid, true))
 			{
 				export_game();
 			}
-			if (igMenuItem_BoolPtr("Import Game", "", &show_import_modal, true));
+			if (igMenuItem_Bool("Import Game", "", false, true))
+			{
+				import_game();
+			}
 			igSeparator();
 
 			if (igMenuItem_Bool("Copy", "CTRL+C", false, true))
@@ -607,7 +601,7 @@ static void process_state_running()
 	if(last_particle_added == -1 || (ig_vec2_length(ig_vec2_diff(particles[last_particle_added].position, emisor)) > particles[last_particle_added].radious * 2 && (num_particles - num_free_particles) < MAX_PARTICLES && inject_particles))
 	{
 		float rad = base_rad + sin(elapsed_time);
-		Particle new_particle = {emisor, {emisor.x + initial_velocity.x * delta_time, emisor.y - initial_velocity.y * delta_time}, {0, 0}, 1, rad, get_random_color()};
+		Particle new_particle = {emisor, {emisor.x + initial_velocity.x * delta_time, emisor.y - initial_velocity.y * delta_time}, {0, 0}, rad, rad, color_verde};
 		add_particle(new_particle);
 	}
 	
@@ -683,7 +677,7 @@ static void process_state_creating_fixed_size_gear(void)
 				int gear_teeth_ids[gear_teeth_max];
 
 				// center
-				Particle centerP = {center, center, {0, 0}, -1, 10, get_random_color()};
+				Particle centerP = {center, center, {0, 0}, -1, 10, color_rojo};
 				add_particle(centerP);
 				
 				int center_particle_id = last_particle_added;
@@ -698,7 +692,7 @@ static void process_state_creating_fixed_size_gear(void)
 			
 					ImVec2 particle_position = {center.x + x, center.y + y};
 
-					Particle newParticle = {particle_position, particle_position, {0, 0}, 10, 10, get_random_color()};
+					Particle newParticle = {particle_position, particle_position, {0, 0}, 10, 10, create_rgb_color(255, 0, 255, 255)};
 					add_particle(newParticle);
 					links[num_links++] = vt_create_link_constraint(last_particle_added, center_particle_id, particles);
 					gear_teeth_ids[num_teeth++] = last_particle_added;
@@ -1076,11 +1070,6 @@ static bool update()
 		case GAME_STATE_CREATING_LINK_CONSTRAINT:
 			process_state_creating_link_constraint();
 			break;
-	}
-
-	if(show_import_modal)
-	{
-		import_game();		
 	}
 
 	if(draw_part_grid)

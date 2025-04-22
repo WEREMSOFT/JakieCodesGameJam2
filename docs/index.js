@@ -31,7 +31,7 @@ if (ENVIRONMENT_IS_NODE) {
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /tmp/tmpb5rqzha6.js
+// include: /tmp/tmpikmhk1bk.js
 
   Module['expectedDataFileDownloads'] ??= 0;
   Module['expectedDataFileDownloads']++;
@@ -212,21 +212,21 @@ Module['FS_createPath']("/", "assets", true, true);
 
   })();
 
-// end include: /tmp/tmpb5rqzha6.js
-// include: /tmp/tmpg3p7qzln.js
+// end include: /tmp/tmpikmhk1bk.js
+// include: /tmp/tmpntfntrko.js
 
     // All the pre-js content up to here must remain later on, we need to run
     // it.
     if (Module['$ww'] || (typeof ENVIRONMENT_IS_PTHREAD != 'undefined' && ENVIRONMENT_IS_PTHREAD)) Module['preRun'] = [];
     var necessaryPreJSTasks = Module['preRun'].slice();
-  // end include: /tmp/tmpg3p7qzln.js
-// include: /tmp/tmptoo6waau.js
+  // end include: /tmp/tmpntfntrko.js
+// include: /tmp/tmpwntw30v5.js
 
     if (!Module['preRun']) throw 'Module.preRun should exist because file support used it; did a pre-js delete it?';
     necessaryPreJSTasks.forEach((task) => {
       if (Module['preRun'].indexOf(task) < 0) throw 'All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?';
     });
-  // end include: /tmp/tmptoo6waau.js
+  // end include: /tmp/tmpwntw30v5.js
 
 
 // Sometimes an existing Module object exists with properties
@@ -7151,6 +7151,30 @@ async function createWasm() {
       return false;
     };
 
+  var _emscripten_run_script = (ptr) => {
+      eval(UTF8ToString(ptr));
+    };
+
+  
+  
+  
+  var _emscripten_run_script_string = (ptr) => {
+      var s = eval(UTF8ToString(ptr));
+      if (s == null) {
+        return 0;
+      }
+      s += '';
+      var me = _emscripten_run_script_string;
+      var len = lengthBytesUTF8(s);
+      if (!me.bufferSize || me.bufferSize < len+1) {
+        if (me.bufferSize) _free(me.buffer);
+        me.bufferSize = len+1;
+        me.buffer = _malloc(me.bufferSize);
+      }
+      stringToUTF8(s, me.buffer, me.bufferSize);
+      return me.buffer;
+    };
+
   
   var handleException = (e) => {
       // Certain exception types we do not treat as errors since they are used for
@@ -9718,7 +9742,7 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('fetchSettings');
 }
 var ASM_CONSTS = {
-  1109576: () => { document.addEventListener('paste', function(e) { const text = e.clipboardData.getData('text/plain'); const len = lengthBytesUTF8(text) + 1; const ptr = _malloc(len); stringToUTF8(text, ptr, len); Module._imgui_clipboard_set_from_js(ptr); _free(ptr); }); }
+  1109960: () => { document.addEventListener('paste', function(e) { const text = e.clipboardData.getData('text/plain'); const len = lengthBytesUTF8(text) + 1; const ptr = _malloc(len); stringToUTF8(text, ptr, len); Module._imgui_clipboard_set_from_js(ptr); _free(ptr); }); }
 };
 function ImGui_ImplGlfw_EmscriptenOpenURL(url) { url = url ? UTF8ToString(url) : null; if (url) window.open(url, '_blank'); }
 var wasmImports = {
@@ -10288,6 +10312,10 @@ var wasmImports = {
   emscripten_glWaitSync: _emscripten_glWaitSync,
   /** @export */
   emscripten_resize_heap: _emscripten_resize_heap,
+  /** @export */
+  emscripten_run_script: _emscripten_run_script,
+  /** @export */
+  emscripten_run_script_string: _emscripten_run_script_string,
   /** @export */
   emscripten_set_main_loop: _emscripten_set_main_loop,
   /** @export */
