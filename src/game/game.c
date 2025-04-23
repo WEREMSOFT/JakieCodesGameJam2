@@ -385,25 +385,6 @@ void draw_energy_efficiency_bar(float efficiency_ratio)
     }
 }
 
-static void draw_plasma_ball(float delta_time, float base_radious)
-{
-	base_radious = fmax(0.0001, base_radious);
-	static float phases[3] = {0.1, 0.2, 0.3};
-	static float radiouses[3];
-	ImU32 colors[3] = {create_rgb_color(255, 255, 255, 200), create_rgb_color(0, 0, 128, 128), create_rgb_color(0, 23, 128, 128)};
-
-	for(int i = 2; i >= 0; i--)
-	{
-		phases[i] += 2.1 * delta_time;
-		radiouses[i] = base_radious * .25 * (i + 1)+ sinf(phases[i]) * 10;
-		ImDrawList_AddCircleFilled(draw_list, ig_vec2_scale(screen_size, 0.5), radiouses[i], colors[i], PARTICLE_FACES);
-	}
-
-	draw_lightning(ig_vec2_scale(screen_size, 0.5), radiouses[2]);
-	star_speed = base_radious / 500.;
-	update_and_draw_starfield(screen_size, delta_time);
-}
-
 static bool draw_gui()
 {
 	if (igBeginMainMenuBar())
@@ -695,6 +676,23 @@ void draw_lightning(ImVec2 center, float radius) {
         float angle = base_angle + (2 * PI / BRANCH_COUNT) * i;
         draw_lightning_branch(center.x, center.y, angle, radius, MAX_SEGMENTS, 0);
     }
+}
+
+static void draw_plasma_ball(float delta_time, float base_radious)
+{
+	static float phases[3] = {0.1, 0.2, 0.3};
+	static float radiouses[3];
+	ImU32 colors[3] = {create_rgb_color(255, 255, 255, 200), create_rgb_color(0, 0, 128, 128), create_rgb_color(0, 23, 128, 128)};
+
+	for(int i = 2; i >= 0; i--)
+	{
+		phases[i] += 2.1 * delta_time;
+		radiouses[i] = base_radious * .25 * (i + 1)+ sinf(phases[i]) * 10;
+		ImDrawList_AddCircleFilled(draw_list, ig_vec2_scale(screen_size, 0.5), radiouses[i], colors[i], PARTICLE_FACES);
+	}
+
+	draw_lightning(ig_vec2_scale(screen_size, 0.5), radiouses[2]);
+	update_and_draw_starfield(screen_size, delta_time);
 }
 
 static void process_state_running()
