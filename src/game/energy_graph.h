@@ -60,7 +60,7 @@ float get_max_value(const float* data, int count) {
     return max;
 }
 
-void draw_energy_graph()
+void draw_energy_graph(bool *close_var)
 {
 	int count = historyWrapped ? MAX_HISTORY : historyIndex;
 
@@ -77,7 +77,7 @@ void draw_energy_graph()
 	char extraction_efficiency[100] = {0};
 	sprintf(extraction_efficiency, "Extraction Efficiency %.2f", extractionEfficiencyHistory[historyIndex]);
 
-	if (igBegin("Energy Extraction vs Time", NULL, 0))
+	if (igBegin("Energy Extraction vs Time", close_var, 0))
 	{
 		igPlotLines_FloatPtr(
 			title_linked,
@@ -133,5 +133,4 @@ void update_energy_display(Particle* particles, LinkConstraint* constraints, int
 	EnergyOutput eo = calculate_kinetic_energy(particles, constraints, numParticles, numConstraints, deltaT);
 	
     update_energy_history(eo.linked_particles, eo.free_particles);
-    draw_energy_graph();
 }

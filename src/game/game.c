@@ -18,7 +18,6 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
-#include <emscripten-browser-clipboard.h>
 #endif
 
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
@@ -37,6 +36,7 @@
 #include "imgui_vector_math.h"
 #include "energy_graph.h"
 #include "browser_interaction.h"
+#include "starfield.h"
 
 #define PARTICLE_FACES 30
 #define CONSTRAINT_FACES 64
@@ -72,22 +72,21 @@ static SpacePartitionCell space_partition_grid[50][50] = {0};
 
 int cellSize = 20;
 
-static ImU32 color_rojo;
-static ImU32 color_blanco;
-static ImU32 color_verde;
+EnergyOutput energy_output = {0.000001, 0.000001};
 
 bool space_partitioning = false;
 bool inject_particles = true;
 bool constrain_to_screen = false;
 bool destroy_particels_outside_screen = true;
 bool draw_part_grid = false;
-bool show_import_window = false;
-bool show_import_modal = false;
+bool show_energy_window = false;
+bool show_emisor_properties_window = true;
+bool show_how_to_play_window = true;
+bool developer_mode = false;
 
-static ImU32 create_rgb_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
-{
-	return (r) | (g << 8) | (b << 16) | (a << 24);
-}
+static ImVec2 particle_emissor_initial_velocity = { -3., 0 };
+static float particle_emissor_base_radious = 2.;
+static ImVec2 emissor_position = {0};
 
 static ImU32 get_random_color()
 {
@@ -98,13 +97,6 @@ static ImU32 get_random_color()
 	uint8_t b = floor(sinf(phase_b+=.1) * 255);
 
 	return create_rgb_color(r, g, b, 255);
-}
-
-static void init_colors()
-{
-	color_rojo = create_rgb_color(255, 0, 0, 255);
-	color_blanco = create_rgb_color(255, 255, 255, 255);
-	color_verde = create_rgb_color(0, 255, 0, 255);
 }
 
 static void add_particle(Particle particle)
@@ -168,62 +160,9 @@ static void reset_partition_grid()
 	memset(space_partition_grid, 0, sizeof(SpacePartitionCell) * 50 * 50);
 }
 
-static void init(int width, int height, int window_scale, bool full_screen)
-{
-	screen_size.x = width;
-	screen_size.y = height;
-	printf("initializing game...\n");
-	window = glfwCreateAndInitWindow(width, height, window_scale, full_screen);
-	glfwSwapInterval(1); 
-	ioptr = init_dear_imgui(window);
-	image = LoadTexture("assets/DinoSprites - doux.png");
-	particles[0] = (Particle){(ImVec2){300, 20}, (ImVec2){300, 20}, (ImVec2){0, 0}, 1.};
-	init_colors();
-	ioptr->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
-	
-	#ifdef __EMSCRIPTEN__
-	imgui_clipboard_init();
-	#endif
-}
-
-void serialize_level(char *out_buffer, size_t out_size)
-{
-	char *ptr = out_buffer;
-	int written = snprintf(ptr, out_size, "PARTICLES\n");
-	ptr += written;
-	out_size -= written;
-
-	for (int i = 0; i < num_particles; i++)
-	{
-		const Particle *p = &particles[i];
-		if(!particles[i].enabled) continue;
-		written = snprintf(ptr, out_size,
-						   "%d %.0f %.0f %.0f %.0f %.0f %.0f %u\n",
-						   i,
-						   p->position.x, p->position.y,
-						   p->prevPosition.x, p->prevPosition.y,
-						   p->mass, p->radious,
-						   p->color);
-		ptr += written;
-		out_size -= written;
-	}
-
-	written = snprintf(ptr, out_size, "CONSTRAINTS\n");
-	ptr += written;
-	out_size -= written;
-
-	for (int i = 0; i < num_links; i++)
-	{
-		const LinkConstraint *c = &links[i];
-		written = snprintf(ptr, out_size,
-						   "%d %d %.0f\n", c->particleA, c->particleB, c->length);
-		ptr += written;
-		out_size -= written;
-	}
-}
-
 int deserialize_level(const char *input)
 {
+	if(strlen(input) == 0) return -1;
 	num_particles = 0;
 	num_links = 0;
 
@@ -280,6 +219,72 @@ int deserialize_level(const char *input)
 	return 1; // success
 }
 
+static void import_game(void)
+{
+	#ifdef __EMSCRIPTEN__
+	load_level_from_url(levelTextBuffer, MAX_LEVEL_TEXT);
+	if(deserialize_level(levelTextBuffer) > -1)
+	{
+		show_how_to_play_window = false;
+	}
+	printf("deserialization complete\n");
+	#endif
+}
+
+static void init(int width, int height, int window_scale, bool full_screen)
+{
+	screen_size.x = width;
+	screen_size.y = height;
+	printf("initializing game...\n");
+	window = glfwCreateAndInitWindow(width, height, window_scale, full_screen);
+	glfwSwapInterval(1); 
+	ioptr = init_dear_imgui(window);
+	image = LoadTexture("assets/DinoSprites - doux.png");
+	particles[0] = (Particle){(ImVec2){300, 20}, (ImVec2){300, 20}, (ImVec2){0, 0}, 1.};
+	init_colors();
+	ioptr->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+	emissor_position = (ImVec2) {.x = screen_size.x/2, .y = screen_size.y/2-550};
+	draw_list = igGetBackgroundDrawList_Nil();
+	init_stars(draw_list);
+	import_game();
+}
+
+void serialize_level(char *out_buffer, size_t out_size)
+{
+	char *ptr = out_buffer;
+	int written = snprintf(ptr, out_size, "PARTICLES\n");
+	ptr += written;
+	out_size -= written;
+
+	for (int i = 0; i < num_particles; i++)
+	{
+		const Particle *p = &particles[i];
+		if(!particles[i].enabled) continue;
+		written = snprintf(ptr, out_size,
+						   "%d %.0f %.0f %.0f %.0f %.0f %.0f %u\n",
+						   i,
+						   p->position.x, p->position.y,
+						   p->prevPosition.x, p->prevPosition.y,
+						   p->mass, p->radious,
+						   p->color);
+		ptr += written;
+		out_size -= written;
+	}
+
+	written = snprintf(ptr, out_size, "CONSTRAINTS\n");
+	ptr += written;
+	out_size -= written;
+
+	for (int i = 0; i < num_links; i++)
+	{
+		const LinkConstraint *c = &links[i];
+		written = snprintf(ptr, out_size,
+						   "%d %d %.0f\n", c->particleA, c->particleB, c->length);
+		ptr += written;
+		out_size -= written;
+	}
+}
+
 static void export_game(void)
 {
 	#ifdef __EMSCRIPTEN__
@@ -290,13 +295,113 @@ static void export_game(void)
 	
 }
 
-static void import_game(void)
+void draw_how_to_play_window() {
+    if (!show_how_to_play_window)
+        return;
+
+    // Tamaño y posición inicial (solo si es la primera vez)
+    igSetNextWindowSize((ImVec2){700, 500}, ImGuiCond_Once);
+    igSetNextWindowPos((ImVec2){50, 50}, ImGuiCond_Once, (ImVec2){0, 0});
+
+    // Abre la ventana
+    igBegin("How To Play", &show_how_to_play_window, ImGuiWindowFlags_None);
+
+    // Area de scroll
+    igBeginChild_Str("ScrollRegion", (ImVec2){0, -70}, true, ImGuiWindowFlags_HorizontalScrollbar);
+    
+    // Texto largo
+    igTextWrapped("This game is a particle-based sandbox where you build mechanical and energy structures.\n\n"
+
+        "PARTICLES, GENERATORS, and REPULSION FIELDS are created by dragging on the canvas. "
+        "The size and type depend on the length and direction of your drag gesture.\n\n"
+
+        "- The EMITTER (only one) releases particles in a controlled way to generate energy.\n"
+        "- GENERATORS absorb free kinetic energy from the free particles through collision and transmit it to the plasma globe.\n"
+        "- REPULSION FIELDS push particles away within a defined radius.\n"
+        "- FIXED PARTICLES are frozen in place and used as anchor points to build stable structures.\n\n"
+
+        "The energy collected by the generators fuels the plasma globe in the background. You can customize "
+        "the emitted particles’ properties (mass, radius, velocity) to influence how efficiently energy is captured.\n\n"
+
+        "Be careful: too many particles—or particles with high energy—can bounce around chaotically, slowing down the generators’ efficiency.\n\n"
+
+        "Use EDIT and RUN modes to interact or observe. Levels can be saved and shared via copy/paste. "
+        "When using copy and paste, the shareable URL appears in the text box below the game.\n\n"
+
+        "Experiment with different configurations to improve efficiency. Your goal: make the plasma globe as large as possible "
+        "while maintaining an energy conversion efficiency above 60%%!");
+
+    igEndChild();
+
+    igCheckbox("Show ENERGY EFFICIENCY window", &show_energy_window);
+    igCheckbox("Show EMITTER PROPERTIES window", &show_emisor_properties_window);
+
+    if (igButton("I know what I'm doing.", (ImVec2){0, 0})) {
+        show_how_to_play_window = false;
+    }
+
+    igEnd();
+}
+
+void draw_energy_efficiency_bar(float efficiency_ratio) 
 {
-	#ifdef __EMSCRIPTEN__
-	load_level_from_url(levelTextBuffer, MAX_LEVEL_TEXT);
-	deserialize_level(levelTextBuffer);
-	printf("deserialization complete\n");
-	#endif
+	efficiency_ratio = fmax(0.0001, efficiency_ratio);
+	igSetNextWindowPos((ImVec2) {0, 20}, ImGuiCond_Once, (ImVec2){0});
+
+    if (igBegin("Efficiency", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+
+		ImDrawList* draw_list = igGetWindowDrawList();
+        ImVec2 pos = {0};
+		igGetCursorScreenPos(&pos);
+        float width = 50.0f;
+        float height = 535.0f;
+
+        // Colores
+        ImU32 bg_color = create_rgb_color(80, 80, 80, 255);
+        ImU32 fg_color = create_rgb_color(100, 255, 100, 255);
+        ImU32 border_color = create_rgb_color(255, 255, 255, 255);
+        ImU32 text_color = create_rgb_color(255, 255, 255, 255);
+
+        // Rectángulo base
+        ImVec2 p0 = pos;
+        ImVec2 p1 = { pos.x + width, pos.y + height };
+		ImDrawList_AddRectFilled(draw_list, p0, p1, bg_color, 4.0f, 0);
+        // draw_list->AddRectFilled(p0, p1, bg_color, 4.0f);
+        // draw_list->AddRect(p0, p1, border_color, 4.0f, 0, 1.5f);
+		ImDrawList_AddRectFilled(draw_list, p0, p1, border_color, 4.0f, 0);
+
+        // Altura del contenido según eficiencia (clamp entre 0 y 1)
+        if (efficiency_ratio < 0.0f) efficiency_ratio = 0.0f;
+        if (efficiency_ratio > 1.0f) efficiency_ratio = 1.0f;
+
+        float fill_height = height * efficiency_ratio;
+        ImVec2 fill_p0 = { pos.x, pos.y + (height - fill_height) };
+        ImVec2 fill_p1 = { pos.x + width, pos.y + height };
+       ImDrawList_AddRectFilled(draw_list, fill_p0, fill_p1, fg_color, 4.0f, 0);
+
+        igDummy((ImVec2){width, height + 5});
+
+        igEnd();
+    }
+}
+
+static void draw_plasma_ball(float delta_time, float base_radious)
+{
+	base_radious = fmax(0.0001, base_radious);
+	static float phases[3] = {0.1, 0.2, 0.3};
+	static float radiouses[3];
+	ImU32 colors[3] = {create_rgb_color(255, 255, 255, 200), create_rgb_color(0, 0, 128, 128), create_rgb_color(0, 23, 128, 128)};
+
+	for(int i = 2; i >= 0; i--)
+	{
+		phases[i] += 2.1 * delta_time;
+		radiouses[i] = base_radious * .25 * (i + 1)+ sinf(phases[i]) * 10;
+		ImDrawList_AddCircleFilled(draw_list, ig_vec2_scale(screen_size, 0.5), radiouses[i], colors[i], PARTICLE_FACES);
+	}
+
+	draw_lightning(ig_vec2_scale(screen_size, 0.5), radiouses[2]);
+	star_speed = base_radious / 500.;
+	update_and_draw_starfield(screen_size, delta_time);
 }
 
 static bool draw_gui()
@@ -306,7 +411,7 @@ static bool draw_gui()
 		if (igBeginMenu("Edit", true))
 		{
 			state = GAME_STATE_READY;
-			if (igMenuItem_Bool("Add Particle", "", false, true))
+			if (igMenuItem_Bool("Add Particle(defines size)", "", false, true))
 			{
 				state = GAME_STATE_CREATING_PARTICLE;
 			}
@@ -314,30 +419,37 @@ static bool draw_gui()
 			{
 				state = GAME_STATE_CREATING_FIXED_PARTICLE;
 			}
-			if (igMenuItem_Bool("Add Standard Particle", "", false, true))
+			if (igMenuItem_Bool("Add Particle with a standard size", "", false, true))
 			{
 				state = GAME_STATE_CREATING_STANDARD_PARTICLE;
 			}
-			if (igMenuItem_Bool("Add Far Constraint", "", false, true))
-			{
-				state = GAME_STATE_CREATING_FAR_CONSTRAINT;
-			}
-			if (igMenuItem_Bool("Add Near Constraint", "", false, true))
-			{
-				state = GAME_STATE_CREATING_NEAR_CONSTRAINT;
-			}
-			if (igMenuItem_Bool("Add Link Constraint", "", false, true))
+			igSeparator();
+			if (igMenuItem_Bool("Add Link Between Particles", "", false, true))
 			{
 				state = GAME_STATE_CREATING_LINK_CONSTRAINT;
 			}
-			if (igMenuItem_Bool("Add Fixed Size Gear", "", false, true))
+			igSeparator();
+			if(developer_mode){
+				if (igMenuItem_Bool("Add Global Restriction Field", "", false, true))
+				{
+					state = GAME_STATE_CREATING_FAR_CONSTRAINT;
+				}
+			}
+			if (igMenuItem_Bool("Add Expulsion Field", "", false, true))
+			{
+				state = GAME_STATE_CREATING_NEAR_CONSTRAINT;
+			}
+
+			igSeparator();
+			if (igMenuItem_Bool("Add Fixed Size Generator", "", false, true))
 			{
 				state = GAME_STATE_CREATING_FIXED_SIZE_GEAR;
 			}
-			if (igMenuItem_Bool("Add Gear", "", false, true))
+			if (igMenuItem_Bool("Add Generator(defines size)", "", false, true))
 			{
 				state = GAME_STATE_CREATING_GEAR;
 			}
+			igSeparator();
 			if (igMenuItem_Bool("Run", "", false, true))
 			{
 				state = GAME_STATE_RUNNING;
@@ -349,45 +461,57 @@ static bool draw_gui()
 				
 			}
 			igSeparator();
-			if (igMenuItem_BoolPtr("Constrain Particles To Screen", "", &constrain_to_screen, true));
-			if (igMenuItem_BoolPtr("Destroy Particles Out Of Screen", "", &destroy_particels_outside_screen, true));
-			if (igMenuItem_BoolPtr("Space Partitioning", "", &space_partitioning, true));
-			if (igMenuItem_BoolPtr("Inject Particles", "", &inject_particles, true));
-			if (igMenuItem_BoolPtr("Draw Partition Grid", "", &draw_part_grid, true));
+			igMenuItem_BoolPtr("Show Energy Efficience", "", &show_energy_window, true);
+			igMenuItem_BoolPtr("Show Particle Emitter Properties", "", &show_emisor_properties_window, true);
 			igSeparator();
-			#ifdef __EMSCRIPTEN__
-			if (igMenuItem_Bool("Write Broser Url", "", false, true))
+			if(developer_mode)
 			{
-				set_browser_url("?level=3&mode=edit");
+				if (igMenuItem_BoolPtr("Constrain Particles To Screen", "", &constrain_to_screen, true));
+				if (igMenuItem_BoolPtr("Destroy Particles Out Of Screen", "", &destroy_particels_outside_screen, true));
+				if (igMenuItem_BoolPtr("Space Partitioning", "", &space_partitioning, true));
+				if (igMenuItem_BoolPtr("Inject Particles", "", &inject_particles, true));
+				if (igMenuItem_BoolPtr("Draw Partition Grid", "", &draw_part_grid, true));
+				igSeparator();
+				#ifdef __EMSCRIPTEN__
+				if (igMenuItem_Bool("Write Broser Url", "", false, true))
+				{
+					set_browser_url("?level=3&mode=edit");
+				}
+	
+				if (igMenuItem_Bool("Get Broser Url", "", false, true))
+				{
+					printf("%s\n", get_browser_url());
+				}
+	
+				if (igMenuItem_Bool("Get Console Text", "", false, true))
+				{
+					clear_output_console();
+					printf("\n##########\n%s\n", get_console_text(levelTextBuffer));
+				}
+	
+				igSeparator();
+				#endif
 			}
-
-			if (igMenuItem_Bool("Get Broser Url", "", false, true))
-			{
-				printf("%s\n", get_browser_url());
-			}
-
-			if (igMenuItem_Bool("Get Console Text", "", false, true))
-			{
-				clear_output_console();
-				printf("\n##########\n%s\n", get_console_text(levelTextBuffer));
-			}
-
-			igSeparator();
-			#endif
-			if (igMenuItem_Bool("Export Game", "", &draw_part_grid, true))
+			
+			if (igMenuItem_Bool("Export Game", "", NULL, true))
 			{
 				export_game();
 			}
-			if (igMenuItem_Bool("Import Game", "", false, true))
+			if (igMenuItem_Bool("Import Game", "", NULL, true))
 			{
 				import_game();
 			}
 			igSeparator();
+			igMenuItem_BoolPtr("Developer Mode(only if you know what you are doing)", "", &developer_mode, true);
+			igEndMenu();
+		}
 
-			if (igMenuItem_Bool("Copy", "CTRL+C", false, true))
+		if (igBeginMenu("Help", true))
+		{
+			if (igMenuItem_BoolPtr("About", "", &show_how_to_play_window, true))
 			{
 			}
-			if (igMenuItem_Bool("Paste", "CTRL+V", false, true))
+			if (igMenuItem_BoolPtr("How To Play", "", &show_how_to_play_window, true))
 			{
 			}
 			igEndMenu();
@@ -408,8 +532,32 @@ static bool draw_gui()
 		if (igBeginMenu(particle_count_txt, true))
 			igEndMenu();
 		igEndMainMenuBar();
+
+		if(show_energy_window  && !show_how_to_play_window)
+		{
+			igSetNextWindowPos((ImVec2) {0, 454}, ImGuiCond_FirstUseEver, (ImVec2){0});
+			draw_energy_graph(&show_energy_window);
+		}
+
+		EnergyOutput eo = calculate_kinetic_energy(particles, links, num_particles, num_links, ioptr->DeltaTime);
+
+		draw_energy_efficiency_bar(eo.linked_particles / eo.free_particles);
+
+		if(show_emisor_properties_window && !show_how_to_play_window)
+		{
+			igSetNextWindowPos((ImVec2) {500,19}, ImGuiCond_Once, (ImVec2){0, 0});
+			igSetNextWindowSize((ImVec2) {270,105}, ImGuiCond_Once);
+			igBegin("Particle Emisor Properties", &show_emisor_properties_window, ImGuiWindowFlags_AlwaysAutoResize);
+			igText("Speed X:");
+			igSliderFloat("SliderX", &particle_emissor_initial_velocity.x, -1000.0f, 1000.0f, "%.3f", 0);
+			igText("Speed Y:");
+			igSliderFloat("SliderY", &particle_emissor_initial_velocity.y, -1000.0f, 1000.0f, "%.3f", 0);
+			igText("Particle Size:");
+			igSliderFloat("Particle Size", &particle_emissor_base_radious, 2.0f, 50.0f, "%.3f", 0);
+			igEnd();
+		}
+		draw_how_to_play_window();
 	}
-	
 }
 
 static SpacePartitionCell create_mega_cell(int celX, int celY)
@@ -435,7 +583,9 @@ static void delete_offscreen_particles()
 	{
 		if(!particles[i].enabled) continue;
 
-		if(particles[i].position.x < 0 || particles[i].position.x > screen_size.x || particles[i].position.y > screen_size.y)
+		int window_padding = 100;
+
+		if(particles[i].position.x < -window_padding || particles[i].position.x > screen_size.x + window_padding || particles[i].position.y > screen_size.y + window_padding)
 		{
 			delete_particle(i);
 		}
@@ -547,60 +697,28 @@ void draw_lightning(ImVec2 center, float radius) {
     }
 }
 
-static void draw_plasma_ball(float delta_time, float base_radious)
-{
-	static float phases[3] = {0.1, 0.2, 0.3};
-	static float radiouses[3];
-	ImU32 colors[3] = {create_rgb_color(255, 255, 255, 200), create_rgb_color(0, 0, 128, 128), create_rgb_color(0, 23, 128, 128)};
-
-	for(int i = 2; i >= 0; i--)
-	{
-		phases[i] += 2.1 * delta_time;
-		radiouses[i] = base_radious * .25 * (i + 1)+ sinf(phases[i]) * 10;
-		ImDrawList_AddCircleFilled(draw_list, ig_vec2_scale(screen_size, 0.5), radiouses[i], colors[i], PARTICLE_FACES);
-	}
-
-	draw_lightning(ig_vec2_scale(screen_size, 0.5), radiouses[2]);
-}
-
 static void process_state_running()
 {
 	ImVec2 mouse_pos;
 	igGetMousePos(&mouse_pos);
-	
+
 	float delta_time = igGetIO()->DeltaTime;
 
 	EnergyOutput eo = calculate_kinetic_energy(particles, links, num_particles, num_links, delta_time);
-
+	update_energy_display(particles, links, num_particles, num_links, delta_time);
+	draw_plasma_ball(delta_time, eo.linked_particles);
+	
 	update_energy_display(particles, links, num_particles, num_links, delta_time);
 
-	draw_plasma_ball(delta_time, eo.linked_particles);
 	static float elapsed_time = 0;
 
 	elapsed_time += delta_time;
 
-	static ImVec2 initial_velocity = { -3., 0 };
-	static float base_rad = 2.;
-	{
-		bool open = false;
-		igSetNextWindowPos((ImVec2) {500,19}, ImGuiCond_Once, (ImVec2){0, 0});
-		igSetNextWindowSize((ImVec2) {270,105}, ImGuiCond_Once);
-		igBegin("Particle Emisor Properties", &open, ImGuiWindowFlags_AlwaysAutoResize);
-		igText("Speed X:");
-		igSliderFloat("SliderX", &initial_velocity.x, -1000.0f, 1000.0f, "%.3f", 0);
-		igText("Speed Y:");
-		igSliderFloat("SliderY", &initial_velocity.y, -1000.0f, 1000.0f, "%.3f", 0);
-		igText("Particle Size:");
-		igSliderFloat("Particle Size", &base_rad, 2.0f, 3.0f, "%.3f", 0);
-		igEnd();
-	}
 
-	ImVec2 emisor = {.x = screen_size.x/2 + 30, .y = screen_size.y/2-200};
-
-	if(last_particle_added == -1 || (ig_vec2_length(ig_vec2_diff(particles[last_particle_added].position, emisor)) > particles[last_particle_added].radious * 2 && (num_particles - num_free_particles) < MAX_PARTICLES && inject_particles))
+	if(last_particle_added == -1 || (ig_vec2_length(ig_vec2_diff(particles[last_particle_added].position, emissor_position)) > particles[last_particle_added].radious * 2 && (num_particles - num_free_particles) < MAX_PARTICLES && inject_particles))
 	{
-		float rad = base_rad + sin(elapsed_time);
-		Particle new_particle = {emisor, {emisor.x + initial_velocity.x * delta_time, emisor.y - initial_velocity.y * delta_time}, {0, 0}, rad, rad, color_verde};
+		float rad = particle_emissor_base_radious + sin(elapsed_time);
+		Particle new_particle = {emissor_position, {emissor_position.x + particle_emissor_initial_velocity.x * delta_time, emissor_position.y - particle_emissor_initial_velocity.y * delta_time}, {0, 0}, rad, rad, color_verde};
 		add_particle(new_particle);
 	}
 	
@@ -973,7 +1091,7 @@ void draw_link_constraints()
 {
 	for(int i = 0; i < num_links; i++)
 	{
-		ImDrawList_AddLine(draw_list, particles[links[i].particleA].position, particles[links[i].particleB].position, color_blanco, 2);
+		ImDrawList_AddLine(draw_list, particles[links[i].particleA].position, particles[links[i].particleB].position, color_rojo, 2);
 	}
 }
 
@@ -1034,6 +1152,7 @@ static void draw_partition_grid()
 
 static bool update()
 {
+	
 	begin_frame();
 	draw_list = igGetBackgroundDrawList_Nil();
 	draw_gui();
