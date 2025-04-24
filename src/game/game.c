@@ -89,16 +89,16 @@ static ImVec2 particle_emissor_initial_velocity = { -3., 0 };
 static float particle_emissor_base_radious = 2.;
 static ImVec2 emissor_position = {0};
 
-static ImU32 get_random_color()
-{
-	static float phase_r = PI, phase_g = 2 * PI, phase_b = 3 * PI;
+// static ImU32 get_random_color()
+// {
+// 	static float phase_r = PI, phase_g = 2 * PI, phase_b = 3 * PI;
 
-	uint8_t r = floor(sinf(phase_r+=.1) * 255);
-	uint8_t g = floor(sinf(phase_g+=.1) * 255);
-	uint8_t b = floor(sinf(phase_b+=.1) * 255);
+// 	uint8_t r = floor(sinf(phase_r+=.1) * 255);
+// 	uint8_t g = floor(sinf(phase_g+=.1) * 255);
+// 	uint8_t b = floor(sinf(phase_b+=.1) * 255);
 
-	return create_rgb_color(r, g, b, 255);
-}
+// 	return create_rgb_color(r, g, b, 255);
+// }
 
 static void add_particle(Particle particle)
 {
@@ -868,7 +868,7 @@ static void process_state_creating_gear(void)
 				int gear_teeth_ids[gear_teeth_max];
 
 				// center
-				Particle centerP = {center, center, {0, 0}, -1, 10, get_random_color()};
+				Particle centerP = {center, center, {0, 0}, -1, 10, color_rojo};
 				add_particle(centerP);
 				
 				int center_particle_id = last_particle_added;
@@ -883,7 +883,7 @@ static void process_state_creating_gear(void)
 			
 					ImVec2 particle_position = {center.x + x, center.y + y};
 
-					Particle newParticle = {particle_position, particle_position, {0, 0}, 10, 10, get_random_color()};
+					Particle newParticle = {particle_position, particle_position, {0, 0}, 10, 10, color_purpura};
 					add_particle(newParticle);
 					links[num_links++] = vt_create_link_constraint(last_particle_added, center_particle_id, particles);
 					gear_teeth_ids[num_teeth++] = last_particle_added;
@@ -928,7 +928,7 @@ static void process_state_creating_fixed_particle(void)
 			{
 				creatingParticleState = SUBSTATE_READY;
 				if(radious < 2) return;
-				Particle newParticle = {center, center, {0, 0}, -1, radious, get_random_color()};
+				Particle newParticle = {center, center, {0, 0}, -1, radious, color_rojo};
 				add_particle(newParticle);
 			}
 			break;
@@ -962,7 +962,7 @@ static void process_state_creating_particle(void)
 			{
 				creatingParticleState = SUBSTATE_READY;
 				if(radious < 2) return;
-				Particle newParticle = {center, center, {0, 0}, radious, radious, get_random_color()};
+				Particle newParticle = {center, center, {0, 0}, radious, radious, color_verde};
 				add_particle(newParticle);
 			}
 			break;
@@ -995,7 +995,7 @@ static void process_state_creating_standard_particle(void)
 			} else 
 			{
 				creatingParticleState = SUBSTATE_READY;
-				Particle newParticle = {mouse_pos, mouse_pos, {0, 0}, 10, 10, get_random_color()};
+				Particle newParticle = {mouse_pos, mouse_pos, {0, 0}, 10, 10, color_verde};
 				add_particle(newParticle);
 			}
 			break;
@@ -1099,7 +1099,7 @@ void draw_link_constraints()
 {
 	for(int i = 0; i < num_links; i++)
 	{
-		ImDrawList_AddLine(draw_list, particles[links[i].particleA].position, particles[links[i].particleB].position, color_rojo, 2);
+		ImDrawList_AddLine(draw_list, particles[links[i].particleA].position, particles[links[i].particleB].position, color_gris, 2);
 	}
 }
 

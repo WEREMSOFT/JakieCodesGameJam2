@@ -38,16 +38,16 @@ main_clean.bin:
 web:
 	rm -rf docs
 	mkdir docs
-	emcc -O0 -g -Ilibs/include -Ilibs/soloud/include -Ilibs/soloud/include -Ilibs/cimgui  -sSTACK_SIZE=1024000 -sEXPORTED_RUNTIME_METHODS="['ccall', 'cwrap']" -sEXPORTED_FUNCTIONS=_malloc,_free,_main -s DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR=0 -DWITH_MINIAUDIO=1 -DCIMGUI_USE_GLFW=1 -DCIMGUI_USE_OPENGL3=1 -s USE_GLFW=3 -s ALLOW_MEMORY_GROWTH=1 -s MAX_WEBGL_VERSION=2 --preload-file assets -s MIN_WEBGL_VERSION=2 -gsource-map  $(SRC_F) $(SRC_CPP) ./static_libs/cimgui.a -o docs/index.html
+	emcc -O0 -g -Ilibs/include -Ilibs/soloud/include -Ilibs/soloud/include -Ilibs/cimgui  -sSTACK_SIZE=1024000 -sEXPORTED_RUNTIME_METHODS="['ccall', 'cwrap']" -sEXPORTED_FUNCTIONS=_malloc,_free,_main -s DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR=0 -DWITH_MINIAUDIO=1 -DCIMGUI_USE_GLFW=1 -DCIMGUI_USE_OPENGL3=1 -s USE_GLFW=3 -s ALLOW_MEMORY_GROWTH=1 -s MAX_WEBGL_VERSION=2 --preload-file assets -s MIN_WEBGL_VERSION=2 -gsource-map --source-map-base ./src  $(SRC_F) $(SRC_CPP) ./static_libs/cimgui.a -o docs/index.html
 #	emcc -O0 -g -Ilibs/include -Ilibs/soloud/include -Ilibs/soloud/include -Ilibs/cimgui  -sSTACK_SIZE=1024000 -sEXPORTED_RUNTIME_METHODS="['ccall', 'cwrap']" -sEXPORTED_FUNCTIONS=_malloc,_free,_main -s DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR=0 -DWITH_MINIAUDIO=1 -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=10  -DCIMGUI_USE_GLFW=1 -DCIMGUI_USE_OPENGL3=1 -s USE_GLFW=3 -s ALLOW_MEMORY_GROWTH=1 -s MAX_WEBGL_VERSION=2 --preload-file assets -s MIN_WEBGL_VERSION=2 -gsource-map --source-map-base http://127.0.0.1:5500/docs/  $(SRC_F) $(SRC_CPP) ./static_libs/cimgui.a -o docs/index.html
 	rm -rf $(OBJ_FOR_CLEAN_F)
-	cp -r src docs
 	(cd docs && zip -r index.zip .)
 
 clean:
 	rm -rf $(OBJ_FOR_CLEAN_F)
 	rm -rf $(TARGET)
 	rm -rf bin/assets
+	rm -rf docs
 	rm -rf html/**/*.*
 	rm -rf ./main.bin
 
