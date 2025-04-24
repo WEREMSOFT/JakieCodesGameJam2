@@ -83,6 +83,7 @@ bool show_energy_window = false;
 bool show_emisor_properties_window = true;
 bool show_how_to_play_window = true;
 bool developer_mode = false;
+bool already_won = false;
 
 static ImVec2 particle_emissor_initial_velocity = { -3., 0 };
 static float particle_emissor_base_radious = 2.;
@@ -336,7 +337,7 @@ void draw_how_to_play_window() {
     igCheckbox("Show ENERGY EFFICIENCY window", &show_energy_window);
     igCheckbox("Show EMITTER PROPERTIES window", &show_emisor_properties_window);
 
-    if (igButton("I know what I'm doing.", (ImVec2){0, 0})) {
+    if (igButton("Close", (ImVec2){0, 0})) {
         show_how_to_play_window = false;
     }
 
@@ -522,6 +523,12 @@ static bool draw_gui()
 
 		EnergyOutput eo = calculate_kinetic_energy(particles, links, num_particles, num_links, ioptr->DeltaTime);
 
+		if(eo.linked_particles / eo.free_particles > .6 && !already_won)
+		{
+			already_won = true;
+			state = GAME_STATE_WON;
+		}
+
 		draw_energy_efficiency_bar(eo.linked_particles / eo.free_particles);
 
 		if(show_emisor_properties_window && !show_how_to_play_window)
@@ -692,7 +699,15 @@ static void draw_plasma_ball(float delta_time, float base_radious)
 	}
 
 	draw_lightning(ig_vec2_scale(screen_size, 0.5), radiouses[2]);
+	star_speed = base_radious * 0.005;
 	update_and_draw_starfield(screen_size, delta_time);
+}
+
+static void draw_background_effects(float delta_time)
+{
+	EnergyOutput eo = calculate_kinetic_energy(particles, links, num_particles, num_links, delta_time);
+	update_energy_display(particles, links, num_particles, num_links, delta_time);
+	draw_plasma_ball(delta_time, eo.linked_particles);
 }
 
 static void process_state_running()
@@ -701,17 +716,12 @@ static void process_state_running()
 	igGetMousePos(&mouse_pos);
 
 	float delta_time = igGetIO()->DeltaTime;
-
-	EnergyOutput eo = calculate_kinetic_energy(particles, links, num_particles, num_links, delta_time);
-	update_energy_display(particles, links, num_particles, num_links, delta_time);
-	draw_plasma_ball(delta_time, eo.linked_particles);
 	
 	update_energy_display(particles, links, num_particles, num_links, delta_time);
 
 	static float elapsed_time = 0;
 
 	elapsed_time += delta_time;
-
 
 	if(last_particle_added == -1 || (ig_vec2_length(ig_vec2_diff(particles[last_particle_added].position, emissor_position)) > particles[last_particle_added].radious * 2 && (num_particles - num_free_particles) < MAX_PARTICLES && inject_particles))
 	{
@@ -1148,11 +1158,38 @@ static void draw_partition_grid()
 
 }
 
+void process_state_won()
+{
+	igSetNextWindowSize((ImVec2){700, 500}, ImGuiCond_Once);
+	igSetNextWindowPos((ImVec2){50, 50}, ImGuiCond_Once, (ImVec2){0, 0});
+
+	igBegin("YOU WON!", NULL, ImGuiWindowFlags_None);
+
+	igBeginChild_Str("ScrollRegion", (ImVec2){0, -70}, true, ImGuiWindowFlags_HorizontalScrollbar);
+
+	igTextWrapped("CONGRATULLATIONS!!!!.\n\n"
+				  "You achieved an energy conversion efficiency above 60%%!\n\n"
+				"Dont forget to share your achievement using the Export Game and pasting the URL in the comments!!");
+
+	igEndChild();
+
+	if (igButton("Close", (ImVec2){0, 0}))
+	{
+		export_game();
+		state = GAME_STATE_RUNNING;
+	}
+
+	igEnd();
+}
+
 static bool update()
 {
 	
 	begin_frame();
 	draw_list = igGetBackgroundDrawList_Nil();
+
+	draw_background_effects(state == GAME_STATE_RUNNING?ioptr->DeltaTime:0);
+
 	draw_gui();
 
 	switch (state)
@@ -1185,6 +1222,9 @@ static bool update()
 			break;
 		case GAME_STATE_CREATING_LINK_CONSTRAINT:
 			process_state_creating_link_constraint();
+			break;
+		case GAME_STATE_WON:
+			process_state_won();
 			break;
 	}
 
