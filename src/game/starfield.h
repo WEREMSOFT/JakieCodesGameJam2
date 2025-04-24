@@ -5,7 +5,8 @@
 #include "colors.h"
 
 #define MAX_STARS 1024
-static ImDrawList *draw_list;
+extern ImDrawList *draw_list;
+
 typedef struct {
     float x, y; // posición en espacio -1 a 1
     float z;    // profundidad (0.0 = cerca, 1.0 = lejos)

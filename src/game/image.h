@@ -7,8 +7,6 @@ typedef struct ImageDef
 	int width, height, channels;
 } ImageDef;
 
-static ImageDef image = {0};
-
 ImageDef LoadTexture(const char *filename);
 
 #endif

@@ -37,6 +37,9 @@
 #include "energy_graph.h"
 #include "browser_interaction.h"
 #include "starfield.h"
+#include "background_effects.h"
+#include "serialization.h"
+#include "help_about_windows.h"
 
 #define PARTICLE_FACES 30
 #define CONSTRAINT_FACES 64
@@ -45,26 +48,27 @@
 static GLFWwindow *window;
 static ImGuiIO *ioptr;
 
-static int num_particles = 0;
-static int last_particle_added = -1;
-static int num_far_constraints = 0;
-static int num_near_constraints = 0;
-static int num_links = 0;
-static int num_free_particles;
+int num_particles = 0;
+int last_particle_added = -1;
+int num_far_constraints = 0;
+int num_near_constraints = 0;
+int num_links = 0;
+int num_free_particles;
+
 #define MAX_PARTICLES 4000
 
 #ifndef PI
 #define PI 3.1415926535897932384626433832795f
 #endif
 
-static LinkConstraint links[MAX_PARTICLES];
-static Particle particles[MAX_PARTICLES];
-static int free_particles_queue[MAX_PARTICLES] = {0};
-static UnidirectionalConstraint far_constraints[MAX_PARTICLES];
-static UnidirectionalConstraint near_constraints[MAX_PARTICLES];
-static GameStateEnum state = GAME_STATE_RUNNING;
-static ImDrawList *draw_list;
-static ImVec2 screen_size = {};
+LinkConstraint links[MAX_PARTICLES];
+Particle particles[MAX_PARTICLES];
+int free_particles_queue[MAX_PARTICLES] = {0};
+UnidirectionalConstraint far_constraints[MAX_PARTICLES];
+UnidirectionalConstraint near_constraints[MAX_PARTICLES];
+GameStateEnum state = GAME_STATE_RUNNING;
+ImDrawList *draw_list;
+ImVec2 screen_size = {};
 #define MAX_LEVEL_TEXT 1000000
 static char levelTextBuffer[MAX_LEVEL_TEXT] = "";
 
@@ -86,9 +90,9 @@ bool show_about_window = false;
 bool developer_mode = false;
 bool already_won = false;
 
-static ImVec2 particle_emissor_initial_velocity = { -3., 0 };
-static float particle_emissor_base_radious = 2.;
-static ImVec2 emissor_position = {0};
+ImVec2 particle_emissor_initial_velocity = { -3., 0 };
+float particle_emissor_base_radious = 2.;
+ImVec2 emissor_position = {0};
 
 static void add_particle(Particle particle)
 {
@@ -151,137 +155,6 @@ static void reset_partition_grid()
 	memset(space_partition_grid, 0, sizeof(SpacePartitionCell) * 50 * 50);
 }
 
-void serialize_level(char *out_buffer, size_t out_size)
-{
-	char *ptr = out_buffer;
-	int written = snprintf(ptr, out_size, "PARTICLES\n");
-	ptr += written;
-	out_size -= written;
-
-	for (int i = 0; i < num_particles; i++)
-	{
-		const Particle *p = &particles[i];
-		if (!p->enabled) continue;
-		written = snprintf(ptr, out_size,
-						   "%d %.0f %.0f %.0f %.0f %.0f %.0f %u\n",
-						   i,
-						   p->position.x, p->position.y,
-						   p->prevPosition.x, p->prevPosition.y,
-						   p->mass, p->radious,
-						   p->color);
-		ptr += written;
-		out_size -= written;
-	}
-
-	written = snprintf(ptr, out_size, "CONSTRAINTS\n");
-	ptr += written;
-	out_size -= written;
-
-	for (int i = 0; i < num_links; i++)
-	{
-		const LinkConstraint *c = &links[i];
-		written = snprintf(ptr, out_size,
-						   "%d %d %.0f\n", c->particleA, c->particleB, c->length);
-		ptr += written;
-		out_size -= written;
-	}
-
-	written = snprintf(ptr, out_size, "NEAR_CONSTRAINTS\n");
-	ptr += written;
-	out_size -= written;
-
-	for (int i = 0; i < num_near_constraints; i++)
-	{
-		const UnidirectionalConstraint *c = &near_constraints[i];
-		written = snprintf(ptr, out_size,
-						   "%.1f %.1f %.1f\n", c->center.x, c->center.y, c->length);
-		ptr += written;
-		out_size -= written;
-	}
-
-	written = snprintf(ptr, out_size, "EMISSOR\n");
-	ptr += written;
-	out_size -= written;
-
-	written = snprintf(ptr, out_size,
-					   "%.2f %.2f %.2f\n",
-					   particle_emissor_initial_velocity.x,
-					   particle_emissor_initial_velocity.y,
-					   particle_emissor_base_radious);
-	ptr += written;
-	out_size -= written;
-}
-
-int deserialize_level(const char *input)
-{
-	if (strlen(input) == 0) return -1;
-	num_particles = 0;
-	num_links = 0;
-	num_near_constraints = 0;
-
-	const char *line = input;
-	char buffer[256];
-	int mode = 0; // 0 = looking, 1 = particles, 2 = constraints, 3 = near_constraints, 4 = emissor
-
-	while (*line)
-	{
-		int len = 0;
-		while (line[len] && line[len] != '\n')
-			len++;
-		if (len >= sizeof(buffer))
-			len = sizeof(buffer) - 1;
-		strncpy(buffer, line, len);
-		buffer[len] = '\0';
-
-		if (strcmp(buffer, "PARTICLES") == 0)
-			mode = 1;
-		else if (strcmp(buffer, "CONSTRAINTS") == 0)
-			mode = 2;
-		else if (strcmp(buffer, "NEAR_CONSTRAINTS") == 0)
-			mode = 3;
-		else if (strcmp(buffer, "EMISSOR") == 0)
-			mode = 4;
-		else if (mode == 1 && num_particles < MAX_PARTICLES)
-		{
-			Particle p = {0};
-			int index = -1;
-			sscanf(buffer, "%i %f %f %f %f %f %f %u",
-				   &index,
-				   &p.position.x, &p.position.y,
-				   &p.prevPosition.x, &p.prevPosition.y,
-				   &p.mass, &p.radious,
-				   &p.color);
-			p.enabled = true;
-			particles[index] = p;
-			num_particles = index + 1;
-		}
-		else if (mode == 2 && num_links < MAX_PARTICLES)
-		{
-			LinkConstraint *c = &links[num_links];
-			sscanf(buffer, "%d %d %f", &c->particleA, &c->particleB, &c->length);
-			num_links++;
-		}
-		else if (mode == 3 && num_near_constraints < MAX_PARTICLES)
-		{
-			UnidirectionalConstraint *c = &near_constraints[num_near_constraints];
-			sscanf(buffer, "%f %f %f", &c->center.x, &c->center.y, &c->length);
-			num_near_constraints++;
-		}
-		else if (mode == 4)
-		{
-			sscanf(buffer, "%f %f %f",
-				   &particle_emissor_initial_velocity.x,
-				   &particle_emissor_initial_velocity.y,
-				   &particle_emissor_base_radious);
-		}
-
-		line += len;
-		if (*line == '\n') line++;
-	}
-
-	return 1; // success
-}
-
 static void import_game(void)
 {
 	#ifdef __EMSCRIPTEN__
@@ -299,11 +172,9 @@ static void init(int width, int height, int window_scale, bool full_screen)
 {
 	screen_size.x = width;
 	screen_size.y = height;
-	printf("initializing game...\n");
 	window = glfwCreateAndInitWindow(width, height, window_scale, full_screen);
 	glfwSwapInterval(1); 
 	ioptr = init_dear_imgui(window);
-	image = LoadTexture("assets/DinoSprites - doux.png");
 	particles[0] = (Particle){(ImVec2){300, 20}, (ImVec2){300, 20}, (ImVec2){0, 0}, 1.};
 	init_colors();
 	ioptr->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
@@ -323,83 +194,6 @@ static void export_game(void)
 	
 }
 
-
-void draw_about_window() {
-    if (!show_about_window)
-        return;
-
-    igSetNextWindowSize((ImVec2){700, 500}, ImGuiCond_Once);
-    igSetNextWindowPos((ImVec2){50, 50}, ImGuiCond_Once, (ImVec2){0, 0});
-
-    igBegin("About", &show_about_window, ImGuiWindowFlags_None);
-
-    igBeginChild_Str("ScrollRegion", (ImVec2){0, -70}, true, ImGuiWindowFlags_HorizontalScrollbar);
-    
-    igTextWrapped(
-		"This game was created by WeremSoft(me) for the Jakie Game Jam #2 during April 2025\n\n"
-		"The game was developed in C99 compiled to webassembly using Emscripten.\n\n"
-		"Libraries used include Soloud(not used), DearImgui(to draw stuff on screen), GLFW(openGL) and STB_IMG(not used)\n\n"
-		"The game itself is basically a hello world for a physics engine, all graphics are made using the drawing API from dearImgui.\n\n"
-		"As cool feature, besides the physics engine itself, implements a way to share the levels created by users using a url link.\n\n"
-	);
-
-    igEndChild();
-
-    if (igButton("Close", (ImVec2){0, 0})) {
-        show_about_window = false;
-    }
-
-    igEnd();
-}
-
-void draw_how_to_play_window() {
-    if (!show_how_to_play_window)
-        return;
-
-    // Tamaño y posición inicial (solo si es la primera vez)
-    igSetNextWindowSize((ImVec2){700, 500}, ImGuiCond_Once);
-    igSetNextWindowPos((ImVec2){50, 50}, ImGuiCond_Once, (ImVec2){0, 0});
-
-    // Abre la ventana
-    igBegin("How To Play", &show_how_to_play_window, ImGuiWindowFlags_None);
-
-    // Area de scroll
-    igBeginChild_Str("ScrollRegion", (ImVec2){0, -70}, true, ImGuiWindowFlags_HorizontalScrollbar);
-    
-    // Texto largo
-    igTextWrapped("This game is a particle-based sandbox where you build mechanical and energy structures.\n\n"
-
-        "PARTICLES, GENERATORS, and REPULSION FIELDS are created by dragging on the canvas. "
-        "The size and type depend on the length and direction of your drag gesture.\n\n"
-
-        "- The EMITTER (only one) releases particles in a controlled way to generate energy.\n"
-        "- GENERATORS absorb free kinetic energy from the free particles through collision and transmit it to the plasma globe.\n"
-        "- REPULSION FIELDS push particles away within a defined radius.\n"
-        "- FIXED PARTICLES are frozen in place and used as anchor points to build stable structures.\n\n"
-
-        "The energy collected by the generators fuels the plasma globe in the background. You can customize "
-        "the emitted particles’ properties (mass, radius, velocity) to influence how efficiently energy is captured.\n\n"
-
-        "Be careful: too many particles—or particles with high energy—can bounce around chaotically, slowing down the generators’ efficiency.\n\n"
-
-        "Use EDIT and RUN modes to interact or observe. Levels can be saved and shared via copy/paste. "
-        "When using copy and paste, the shareable URL appears in the text box below the game.\n\n"
-
-        "Experiment with different configurations to improve efficiency. Your goal: make the plasma globe as large as possible "
-        "while maintaining an energy conversion efficiency above 60%%!");
-
-    igEndChild();
-
-    igCheckbox("Show ENERGY EFFICIENCY window", &show_energy_window);
-    igCheckbox("Show EMITTER PROPERTIES window", &show_emisor_properties_window);
-
-    if (igButton("Close", (ImVec2){0, 0})) {
-        show_how_to_play_window = false;
-    }
-
-    igEnd();
-}
-
 void draw_energy_efficiency_bar(float efficiency_ratio) 
 {
 	efficiency_ratio = fmax(0.0001, efficiency_ratio);
@@ -413,21 +207,16 @@ void draw_energy_efficiency_bar(float efficiency_ratio)
         float width = 50.0f;
         float height = 535.0f;
 
-        // Colores
         ImU32 bg_color = create_rgb_color(80, 80, 80, 255);
         ImU32 fg_color = create_rgb_color(100, 255, 100, 255);
         ImU32 border_color = create_rgb_color(255, 255, 255, 255);
         ImU32 text_color = create_rgb_color(255, 255, 255, 255);
 
-        // Rectángulo base
         ImVec2 p0 = pos;
         ImVec2 p1 = { pos.x + width, pos.y + height };
 		ImDrawList_AddRectFilled(draw_list, p0, p1, bg_color, 4.0f, 0);
-        // draw_list->AddRectFilled(p0, p1, bg_color, 4.0f);
-        // draw_list->AddRect(p0, p1, border_color, 4.0f, 0, 1.5f);
 		ImDrawList_AddRectFilled(draw_list, p0, p1, border_color, 4.0f, 0);
 
-        // Altura del contenido según eficiencia (clamp entre 0 y 1)
         if (efficiency_ratio < 0.0f) efficiency_ratio = 0.0f;
         if (efficiency_ratio > 1.0f) efficiency_ratio = 1.0f;
 
@@ -440,6 +229,26 @@ void draw_energy_efficiency_bar(float efficiency_ratio)
 
         igEnd();
     }
+}
+
+static void draw_start_stop_controls()
+{
+	igSetNextWindowPos((ImVec2){716,546}, ImGuiCond_Always, (ImVec2){0, 0});
+
+	igBegin("Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+
+	if (igButton("Run", (ImVec2){0, 0}))
+	{
+		state = GAME_STATE_RUNNING;
+	}
+	igSameLine(0.0f, -1.0f);
+	if (igButton("Stop", (ImVec2){0, 0}))
+	{
+		state = GAME_STATE_READY;
+	}
+
+	igEnd();
 }
 
 static bool draw_gui()
@@ -621,6 +430,7 @@ static bool draw_gui()
 		}
 		draw_how_to_play_window();
 		draw_about_window();
+		draw_start_stop_controls();
 	}
 }
 
@@ -647,7 +457,7 @@ static void delete_offscreen_particles()
 	{
 		if(!particles[i].enabled) continue;
 
-		int window_padding = 100;
+		int window_padding = 500;
 
 		if(particles[i].position.x < -window_padding || particles[i].position.x > screen_size.x + window_padding || particles[i].position.y > screen_size.y + window_padding)
 		{
@@ -719,73 +529,6 @@ static void enforce_collisions_using_space_partitioning()
 	}
 }
 
-#define MAX_SEGMENTS 10
-#define BRANCH_COUNT 3
-#define MAX_BRANCHES 3 
-#define CHAOS 1.3f 
-
-void draw_lightning_branch(float cx, float cy, float angle, float length, int segments, int depth) {
-    if (depth > MAX_BRANCHES) return; // Detenemos la recursión si llegamos a la profundidad máxima
-
-    float segment_length = length / segments;
-    float x1 = cx;
-    float y1 = cy;
-
-    for (int i = 1; i <= segments; ++i) {
-        float progress = (float)i / segments;
-        float deviation = ((float)rand() / RAND_MAX - 0.5f) * CHAOS;
-
-        float theta = angle + deviation;
-
-        float x2 = cx + cosf(theta) * (segment_length * i);
-        float y2 = cy + sinf(theta) * (segment_length * i);
-
-		ImDrawList_AddLine(draw_list, (ImVec2){x1, y1},(ImVec2){x2, y2}, create_rgb_color(255, 255, 255, 255), 3.);
-
-        x1 = x2;
-        y1 = y2;
-
-        if (rand() % 100 < 50) {
-            float branch_angle = theta + ((rand() % 40) - 20) * (PI / 180.0f);
-            draw_lightning_branch(x2, y2, branch_angle, segment_length * 0.5f, segments / 2, depth + 1);
-        }
-    }
-}
-
-void draw_lightning(ImVec2 center, float radius) {
-	static float base_angle = 0;
-	base_angle += 0.01;
-    for (int i = 0; i < BRANCH_COUNT; ++i) {
-        float angle = base_angle + (2 * PI / BRANCH_COUNT) * i;
-        draw_lightning_branch(center.x, center.y, angle, radius, MAX_SEGMENTS, 0);
-    }
-}
-
-static void draw_plasma_ball(float delta_time, float base_radious)
-{
-	static float phases[3] = {0.1, 0.2, 0.3};
-	static float radiouses[3];
-	ImU32 colors[3] = {create_rgb_color(255, 255, 255, 200), create_rgb_color(0, 0, 128, 128), create_rgb_color(0, 23, 128, 128)};
-
-	for(int i = 2; i >= 0; i--)
-	{
-		phases[i] += 2.1 * delta_time;
-		radiouses[i] = base_radious * .25 * (i + 1)+ sinf(phases[i]) * 10;
-		ImDrawList_AddCircleFilled(draw_list, ig_vec2_scale(screen_size, 0.5), radiouses[i], colors[i], PARTICLE_FACES);
-	}
-
-	draw_lightning(ig_vec2_scale(screen_size, 0.5), radiouses[2]);
-	star_speed = base_radious * 0.005;
-	update_and_draw_starfield(screen_size, delta_time);
-}
-
-static void draw_background_effects(float delta_time)
-{
-	EnergyOutput eo = calculate_kinetic_energy(particles, links, num_particles, num_links, delta_time);
-	update_energy_display(particles, links, num_particles, num_links, delta_time);
-	draw_plasma_ball(delta_time, eo.linked_particles);
-}
-
 static void process_state_running()
 {
 	ImVec2 mouse_pos;
@@ -843,10 +586,10 @@ static void process_state_creating_fixed_size_gear(void)
 	static float radious = 60;
 	{
 		bool open = false;
-		igSetNextWindowPos((ImVec2) {529,19}, ImGuiCond_Once, (ImVec2){0, 0});
-		igSetNextWindowSize((ImVec2) {270,105}, ImGuiCond_Once);
-		igBegin("Gear Size", &open, ImGuiWindowFlags_AlwaysAutoResize);
-		igText("Ajustá el valor:");
+		igSetNextWindowPos((ImVec2) {529,400}, ImGuiCond_FirstUseEver, (ImVec2){0, 0});
+		igSetNextWindowSize((ImVec2) {270,105}, ImGuiCond_FirstUseEver);
+		igBegin("Generator Size", &open, ImGuiWindowFlags_AlwaysAutoResize);
+		igText(":");
 		igSliderFloat("Slider", &radious, 25.0f, 200.0f, "%.3f", 0);
 		igEnd();
 	}
