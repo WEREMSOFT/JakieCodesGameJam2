@@ -79,6 +79,8 @@ int cellSize = 20;
 EnergyOutput energy_output = {0.000001, 0.000001};
 
 bool space_partitioning = false;
+bool draw_plasma_ball_bool = true;
+bool draw_starfield = true;
 bool inject_particles = true;
 bool constrain_to_screen = false;
 bool destroy_particels_outside_screen = true;
@@ -121,6 +123,7 @@ static int get_particle_under_the_mouse()
 
 	for(int i = 0; i < num_particles; i++)
 	{
+		if(!particles[i].enabled) continue;
 		float dist = ig_vec2_length(ig_vec2_diff(particles[i].position, mouse_pos));
 		if(dist < particles[i].radious) return i;
 	}
@@ -268,6 +271,14 @@ static bool draw_gui()
 				last_particle_added = -1;
 				
 			}
+			igSeparator();
+			if(igMenuItem_Bool("Delete Particle", "", NULL, true))
+			{
+				state = GAME_STATE_DELETE_PARTICLE;
+			}
+			igSeparator();
+			if (igMenuItem_BoolPtr("Draw Plasma Ball", "", &draw_plasma_ball_bool, true));
+			if (igMenuItem_BoolPtr("Draw StarField", "", &draw_starfield, true));
 			igSeparator();
 			if(developer_mode)
 			{
@@ -542,6 +553,14 @@ static void process_state_running()
 
 	elapsed_time += delta_time;
 
+	if(destroy_particels_outside_screen) {
+		delete_offscreen_particles();
+	}
+	
+	vt_enforce_far_constraints(particles, num_particles, far_constraints, num_far_constraints);
+	vt_enforce_near_constraints(particles, num_particles, near_constraints, num_near_constraints);
+	vt_enforce_link_constraints(particles, links, num_links);
+
 	if(last_particle_added == -1 || (ig_vec2_length(ig_vec2_diff(particles[last_particle_added].position, emissor_position)) > particles[last_particle_added].radious * 2 && (num_particles - num_free_particles) < MAX_PARTICLES && inject_particles))
 	{
 		float rad = particle_emissor_base_radious + sin(elapsed_time);
@@ -549,18 +568,11 @@ static void process_state_running()
 		add_particle(new_particle);
 	}
 	
-	vt_enforce_far_constraints(particles, num_particles, far_constraints, num_far_constraints);
-	vt_enforce_near_constraints(particles, num_particles, near_constraints, num_near_constraints);
-	vt_enforce_link_constraints(particles, links, num_links);
-	
 	if(constrain_to_screen)
 	{
 		constraint_particles_to_screen();
 	} 
 	
-	if(destroy_particels_outside_screen) {
-		delete_offscreen_particles();
-	}
 
 	vt_accelerate_particles(particles, num_particles, (ImVec2){0, 250.0});
 	vt_update_particles(particles, num_particles, delta_time);
@@ -630,7 +642,7 @@ static void process_state_creating_fixed_size_gear(void)
 			
 				for(int i = 0; i < sides; i++)
 				{
-					float angle = 2 * PI * i / sides;
+					float angle = 2 * PI * i / sides + PI / 2.;
 					float x = sinf(angle) * radious;
 					float y = cosf(angle) * radious;
 			
@@ -918,7 +930,38 @@ void draw_link_constraints()
 {
 	for(int i = 0; i < num_links; i++)
 	{
+		if(!links[i].enabled) continue;
 		ImDrawList_AddLine(draw_list, particles[links[i].particleA].position, particles[links[i].particleB].position, color_gris, 2);
+	}
+}
+
+void highlight_particle(int particle_index)
+{
+	ImU32 color = get_some_color();
+	Particle p = particles[particle_index];
+	ImDrawList_AddCircle(draw_list, p.position, p.radious * 1.2, color, PARTICLE_FACES, 4);
+}
+
+void process_state_deleting_particle()
+{
+	ImVec2 mouse_pos;
+	igGetMousePos(&mouse_pos);
+	static GenericSubstateEnum subState = SUBSTATE_READY;
+	static ImVec2 center;
+	static int particle = -1;
+
+	if(igIsAnyItemActive()) return;
+	particle = get_particle_under_the_mouse();
+	
+	highlight_particle(particle);
+	
+	if(igIsMouseClicked_Bool(ImGuiMouseButton_Left, false))
+	{
+		if(particle != -1)
+		{
+			particles[particle].enabled = false;
+			vt_enforce_link_constraints(particles, links, num_links);
+		}
 	}
 }
 
@@ -935,9 +978,10 @@ void process_state_creating_link_constraint()
 	switch(subState)
 	{
 		case SUBSTATE_READY:
+			particleA = get_particle_under_the_mouse();
+			highlight_particle(particleA);
 			if(igIsMouseClicked_Bool(ImGuiMouseButton_Left, false))
 			{
-				particleA = get_particle_under_the_mouse();
 				if(particleA != -1)
 				{
 					subState = SUBSTATE_DRAWING;
@@ -945,11 +989,13 @@ void process_state_creating_link_constraint()
 			}
 			break;
 		case SUBSTATE_DRAWING:
+			int particleB = get_particle_under_the_mouse();	
+			highlight_particle(particleA);
+			highlight_particle(particleB);
 			if(igIsMouseDown_Nil(ImGuiMouseButton_Left))
 			{
 				ImDrawList_AddLine(draw_list, particles[particleA].position, mouse_pos, color_rojo, 1);
 			} else {
-				int particleB = get_particle_under_the_mouse();	
 				links[num_links++] = vt_create_link_constraint(particleA, particleB, particles);
 				subState = SUBSTATE_READY;
 			}
@@ -1044,6 +1090,9 @@ static bool update()
 			break;
 		case GAME_STATE_WON:
 			process_state_won();
+			break;
+		case GAME_STATE_DELETE_PARTICLE:
+			process_state_deleting_particle();
 			break;
 	}
 

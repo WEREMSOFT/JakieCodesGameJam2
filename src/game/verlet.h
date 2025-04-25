@@ -24,6 +24,7 @@ typedef struct LinkConstraint
 {
 	int particleA, particleB;
 	float length;
+	bool enabled;
 } LinkConstraint;
 
 typedef struct SpacePartitionCell{

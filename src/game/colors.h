@@ -28,4 +28,18 @@ static void init_colors()
 	color_gris = create_rgb_color(200, 200, 200, 255);
 }
 
+ImU32 get_some_color_index(int *color_index)
+{
+	int color = (*color_index)++ % 6;
+	ImU32 colors[] = { color_rojo, color_blanco, color_gris, color_verde, color_azul, color_amarillo, color_purpura };
+	return colors[color];
+}
+
+ImU32 get_some_color()
+{
+	ImU32 colors[] = { color_rojo, color_blanco, color_gris, color_verde, color_azul, color_amarillo, color_purpura };
+	static int color_index = 0;
+	return colors[color_index++ % 6];
+}
+
 #endif

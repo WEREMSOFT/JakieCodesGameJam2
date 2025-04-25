@@ -85,16 +85,25 @@ void vt_enforce_near_constraints(Particle particles[], int numParticles, Unidire
 
 LinkConstraint vt_create_link_constraint(int particleA, int particleB, Particle particles[])
 {
-	return (LinkConstraint){.particleA = particleA, .particleB = particleB, .length = ig_vec2_length(ig_vec2_diff(particles[particleA].position, particles[particleB].position))};
+	return (LinkConstraint){.enabled = true, .particleA = particleA, .particleB = particleB, .length = ig_vec2_length(ig_vec2_diff(particles[particleA].position, particles[particleB].position))};
 }
 
 void vt_enforce_link_constraints(Particle particles[], LinkConstraint linkConstraints[], int numConstraints)
 {
 	for (int i = 0; i < numConstraints; i++)
 	{
+		if(!linkConstraints[i].enabled) continue;
+
 		LinkConstraint constraint = linkConstraints[i];
 		Particle *pA = &particles[constraint.particleA];
 		Particle *pB = &particles[constraint.particleB];
+
+		if(!(pA->enabled && pB->enabled))
+		{
+			linkConstraints[i].enabled = false;
+			continue;
+		} 
+			
 
 		ImVec2 axis = ig_vec2_diff(pA->position, pB->position);
 		float dist = ig_vec2_length(axis);
