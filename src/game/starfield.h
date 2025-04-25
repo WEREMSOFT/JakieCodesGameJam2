@@ -1,16 +1,21 @@
+#ifndef __STARFIELD_H__
+#define __STARFIELD_H__
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #include <cimgui.h>
 #include <stdlib.h>
 #include <cimgui_impl.h>
+#include "game.h"
 #include "colors.h"
 
 #define MAX_STARS 1024
 extern ImDrawList *draw_list;
 
 typedef struct {
-    float x, y; // posición en espacio -1 a 1
-    float z;    // profundidad (0.0 = cerca, 1.0 = lejos)
+    float x, y;
+    float z;
 } Star;
+
+extern GameStateEnum state;
 
 static Star stars[MAX_STARS];
 static int num_stars = 500;
@@ -46,7 +51,7 @@ void update_and_draw_starfield(ImVec2 screen_size, float delta_time) {
             continue;
         }
 
-        if (star_speed > 0.3f) {
+        if (star_speed > 0.5f && state == GAME_STATE_RUNNING) {
             // Dibuja una línea si la velocidad es alta
             float prev_z = s->z + delta_time * star_speed;
             float px = (s->x / prev_z) * center.x + center.x;
@@ -65,3 +70,4 @@ void starfield_ui() {
         igEnd();
     }
 }
+#endif

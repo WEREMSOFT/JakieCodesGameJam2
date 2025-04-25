@@ -40,10 +40,13 @@
 #include "background_effects.h"
 #include "serialization.h"
 #include "help_about_windows.h"
+// #include "sound.h"
 
 #define PARTICLE_FACES 30
 #define CONSTRAINT_FACES 64
 #define SUB_CYCLES 1
+
+// Sound sound;
 
 static GLFWwindow *window;
 static ImGuiIO *ioptr;
@@ -236,21 +239,58 @@ void draw_energy_efficiency_bar(float efficiency_ratio)
 
 static void draw_start_stop_controls()
 {
-	igSetNextWindowPos((ImVec2){716,546}, ImGuiCond_Always, (ImVec2){0, 0});
+	igSetNextWindowPos((ImVec2){265,546}, ImGuiCond_FirstUseEver, (ImVec2){0, 0});
 
 	igBegin("Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
 
 	if (igButton("Run", (ImVec2){0, 0}))
 	{
+		// soundPlaySfx(sound, SFX_COIN);
 		state = GAME_STATE_RUNNING;
 	}
 	igSameLine(0.0f, -1.0f);
 	if (igButton("Stop", (ImVec2){0, 0}))
 	{
+		// soundPlaySfx(sound, SFX_COIN);
 		state = GAME_STATE_READY;
 	}
-
+	igSameLine(0.0f, -1.0f);
+	if (igButton("Delete Particle", (ImVec2){0, 0}))
+	{
+		// soundPlaySfx(sound, SFX_HURT);
+		state = GAME_STATE_DELETE_PARTICLE;
+	}
+	igSameLine(0.0f, -1.0f);
+	if (igButton("Particle", (ImVec2){0, 0}))
+	{
+		// soundPlaySfx(sound, SFX_COIN);
+		state = GAME_STATE_CREATING_STANDARD_PARTICLE;
+	}
+	igSameLine(0.0f, -1.0f);
+	if (igButton("Link", (ImVec2){0, 0}))
+	{
+		// soundPlaySfx(sound, SFX_COIN);
+		state = GAME_STATE_CREATING_LINK_CONSTRAINT;
+	}
+	igSameLine(0.0f, -1.0f);
+	if (igButton("Anchor", (ImVec2){0, 0}))
+	{
+		// soundPlaySfx(sound, SFX_COIN);
+		state = GAME_STATE_CREATING_FIXED_PARTICLE;
+	}
+	igSameLine(0.0f, -1.0f);
+	if (igButton("Generator", (ImVec2){0, 0}))
+	{
+		// soundPlaySfx(sound, SFX_COIN);
+		state = GAME_STATE_CREATING_FIXED_SIZE_GEAR;
+	}
+	igSameLine(0.0f, -1.0f);
+	if (igButton("Expulsor", (ImVec2){0, 0}))
+	{
+		// soundPlaySfx(sound, SFX_COIN);
+		state = GAME_STATE_CREATING_NEAR_CONSTRAINT;
+	}
 	igEnd();
 }
 
@@ -263,10 +303,12 @@ static bool draw_gui()
 			state = GAME_STATE_READY;
 			if (igMenuItem_Bool("Run", "", false, true))
 			{
+				// soundPlaySfx(sound, SFX_COIN);
 				state = GAME_STATE_RUNNING;
 			}
 			if (igMenuItem_Bool("Reset", "", false, true))
 			{
+				// soundPlaySfx(sound, SFX_HURT);
 				num_free_particles =  num_particles = num_near_constraints =  num_far_constraints = num_links = 0;
 				last_particle_added = -1;
 				
@@ -274,6 +316,7 @@ static bool draw_gui()
 			igSeparator();
 			if(igMenuItem_Bool("Delete Particle", "", NULL, true))
 			{
+				// soundPlaySfx(sound, SFX_HURT);
 				state = GAME_STATE_DELETE_PARTICLE;
 			}
 			igSeparator();
@@ -420,6 +463,7 @@ static bool draw_gui()
 
 		if(eo.linked_particles / eo.free_particles > .6 && !already_won)
 		{
+			// soundPlaySpeech(sound, SPEECH_YOU_WIN);
 			already_won = true;
 			state = GAME_STATE_WON;
 		}
@@ -624,8 +668,12 @@ static void process_state_creating_fixed_size_gear(void)
 			} else 
 			{
 				creatingParticleState = SUBSTATE_READY;
-				if(radious < 2) return;
-
+				if(radious < 2)
+				{
+					// soundPlaySfx(sound, SFX_HURT);
+					return;
+				}
+				// soundPlaySfx(sound, SFX_COIN);
 				center = mouse_pos;
 
 				int gear_teeth_max = 30;
@@ -682,6 +730,7 @@ static void process_state_creating_gear(void)
 			{
 				creatingParticleState = SUBSTATE_DRAWING;
 				center = mouse_pos;
+				// soundPlaySfx(sound, SFX_JUMP);
 			}
 			break;
 		case SUBSTATE_DRAWING:
@@ -692,7 +741,12 @@ static void process_state_creating_gear(void)
 			} else 
 			{
 				creatingParticleState = SUBSTATE_READY;
-				if(radious < 2) return;
+				if(radious < 2)
+				{
+					// soundPlaySfx(sound, SFX_HURT);
+				}
+
+				// soundPlaySfx(sound, SFX_COIN);
 
 				int gear_teeth_max = 30;
 				int num_teeth = 0;
@@ -757,6 +811,7 @@ static void process_state_creating_fixed_particle(void)
 				ImDrawList_AddCircle(draw_list, center, radious, color_rojo, PARTICLE_FACES, 1);
 			} else 
 			{
+				// soundPlaySfx(sound, SFX_COIN);
 				creatingParticleState = SUBSTATE_READY;
 				if(radious < 2) return;
 				Particle newParticle = {center, center, {0, 0}, -1, radious, color_rojo};
@@ -782,6 +837,7 @@ static void process_state_creating_particle(void)
 			{
 				creatingParticleState = SUBSTATE_DRAWING;
 				center = mouse_pos;
+				// soundPlaySfx(sound, SFX_JUMP);
 			}
 			break;
 		case SUBSTATE_DRAWING:
@@ -791,6 +847,7 @@ static void process_state_creating_particle(void)
 				ImDrawList_AddCircle(draw_list, center, radious, color_rojo, PARTICLE_FACES, 1);
 			} else 
 			{
+				// soundPlaySfx(sound, SFX_COIN);
 				creatingParticleState = SUBSTATE_READY;
 				if(radious < 2) return;
 				Particle newParticle = {center, center, {0, 0}, radious, radious, color_verde};
@@ -825,6 +882,7 @@ static void process_state_creating_standard_particle(void)
 				ImDrawList_AddCircle(draw_list, mouse_pos, 10, color_rojo, PARTICLE_FACES, 1);
 			} else 
 			{
+				// soundPlaySfx(sound, SFX_COIN);
 				creatingParticleState = SUBSTATE_READY;
 				Particle newParticle = {mouse_pos, mouse_pos, {0, 0}, 10, 10, color_verde};
 				add_particle(newParticle);
@@ -874,6 +932,7 @@ static void process_state_creating_near_constraint()
 			{
 				creatingNearConstraintState = SUBSTATE_DRAWING;
 				center = mouse_pos;
+				// soundPlaySfx(sound, SFX_JUMP);
 			}
 			break;
 		case SUBSTATE_DRAWING:
@@ -883,6 +942,7 @@ static void process_state_creating_near_constraint()
 				ImDrawList_AddCircle(draw_list, center, radious, color_rojo, CONSTRAINT_FACES, 1);
 			} else 
 			{
+				// soundPlaySfx(sound, SFX_COIN);
 				creatingNearConstraintState = SUBSTATE_READY;
 				if(radious < 2) return;
 				UnidirectionalConstraint newNearConstraint = {center, radious};
@@ -960,6 +1020,7 @@ void process_state_deleting_particle()
 		if(particle != -1)
 		{
 			particles[particle].enabled = false;
+			// soundPlaySfx(sound, SFX_HURT);
 			vt_enforce_link_constraints(particles, links, num_links);
 		}
 	}
@@ -985,6 +1046,7 @@ void process_state_creating_link_constraint()
 				if(particleA != -1)
 				{
 					subState = SUBSTATE_DRAWING;
+					// soundPlaySfx(sound, SFX_JUMP);
 				}
 			}
 			break;
@@ -996,6 +1058,7 @@ void process_state_creating_link_constraint()
 			{
 				ImDrawList_AddLine(draw_list, particles[particleA].position, mouse_pos, color_rojo, 1);
 			} else {
+				// soundPlaySfx(sound, SFX_COIN);
 				links[num_links++] = vt_create_link_constraint(particleA, particleB, particles);
 				subState = SUBSTATE_READY;
 			}
