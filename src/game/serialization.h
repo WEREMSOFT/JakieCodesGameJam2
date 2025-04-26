@@ -7,9 +7,11 @@
 extern int num_particles;
 extern int num_links;
 extern int num_near_constraints;
+extern int num_engines;
 extern Particle particles[];
 extern LinkConstraint links[];
 extern UnidirectionalConstraint near_constraints[];
+extern Engine engines[];
 
 extern ImVec2 particle_emissor_initial_velocity;
 extern float particle_emissor_base_radious;
@@ -76,8 +78,31 @@ void serialize_level(char *out_buffer, size_t out_size)
                        particle_emissor_base_radious);
     ptr += written;
     out_size -= written;
-}
 
+    written = snprintf(ptr, out_size, "ENGINES\n");
+    ptr += written;
+    out_size -= written;
+
+    for (int i = 0; i < MAX_PARTICLES; i++)
+    {
+        const Engine *e = &engines[i];
+        if (e->num_particles <= 0) continue;
+        written = snprintf(ptr, out_size, "%d %f %d", e->particle_id_center, e->strength, e->num_particles);
+        ptr += written;
+        out_size -= written;
+
+        for (int j = 0; j < e->num_particles; j++)
+        {
+            written = snprintf(ptr, out_size, " %d", e->particles_border[j]);
+            ptr += written;
+            out_size -= written;
+        }
+
+        written = snprintf(ptr, out_size, "\n");
+        ptr += written;
+        out_size -= written;
+    }
+}
 
 int deserialize_level(const char *input)
 {
@@ -85,10 +110,11 @@ int deserialize_level(const char *input)
     num_particles = 0;
     num_links = 0;
     num_near_constraints = 0;
+    num_engines = 0;
 
     const char *line = input;
     char buffer[256];
-    int mode = 0; // 0 = looking, 1 = particles, 2 = constraints, 3 = near_constraints, 4 = emissor
+    int mode = 0; // 0 = looking, 1 = particles, 2 = constraints, 3 = near_constraints, 4 = emissor, 5 = engines
 
     while (*line)
     {
@@ -108,6 +134,8 @@ int deserialize_level(const char *input)
             mode = 3;
         else if (strcmp(buffer, "EMISSOR") == 0)
             mode = 4;
+        else if (strcmp(buffer, "ENGINES") == 0)
+            mode = 5;
         else if (mode == 1 && num_particles < MAX_PARTICLES)
         {
             Particle p = {0};
@@ -145,6 +173,31 @@ int deserialize_level(const char *input)
                    &particle_emissor_initial_velocity.y,
                    &particle_emissor_base_radious);
         }
+        else if (mode == 5 && num_engines < MAX_PARTICLES)
+        {
+            Engine *e = &engines[num_engines];
+
+            char *token = strtok(buffer, " ");
+            if (!token) continue;
+            e->particle_id_center = atoi(token);
+
+            token = strtok(NULL, " ");
+            if (!token) continue;
+            e->strength = (float)atof(token);
+
+            token = strtok(NULL, " ");
+            if (!token) continue;
+            e->num_particles = atoi(token);
+
+            for (int j = 0; j < e->num_particles; j++)
+            {
+                token = strtok(NULL, " ");
+                if (!token) break;
+                e->particles_border[j] = atoi(token);
+            }
+
+            num_engines++;
+        }
 
         line += len;
         if (*line == '\n') line++;
@@ -152,3 +205,4 @@ int deserialize_level(const char *input)
 
     return 1; // success
 }
+

@@ -57,6 +57,7 @@ int num_far_constraints = 0;
 int num_near_constraints = 0;
 int num_links = 0;
 int num_free_particles;
+int num_engines = 0;
 
 bool fixed_generators = false;
 
@@ -68,6 +69,7 @@ bool fixed_generators = false;
 
 LinkConstraint links[MAX_PARTICLES];
 Particle particles[MAX_PARTICLES];
+Engine engines[MAX_PARTICLES];
 int free_particles_queue[MAX_PARTICLES] = {0};
 UnidirectionalConstraint far_constraints[MAX_PARTICLES];
 UnidirectionalConstraint near_constraints[MAX_PARTICLES];
@@ -97,11 +99,13 @@ bool show_about_window = false;
 bool developer_mode = false;
 bool already_won = false;
 
+float motor_torque = 250.;
+
 ImVec2 particle_emissor_initial_velocity = { -3., 0 };
 float particle_emissor_base_radious = 6.5;
 ImVec2 emissor_position = {0};
 
-static void add_particle(Particle particle, bool user_created)
+static int add_particle(Particle particle, bool user_created)
 {
 	particle.enabled = true;
 	particle.user_created = user_created;
@@ -110,10 +114,11 @@ static void add_particle(Particle particle, bool user_created)
 		int free_particle = free_particles_queue[--num_free_particles];
 		last_particle_added = free_particle;
 		particles[free_particle] = particle;
-		return;
+		return free_particle;
 	}
 	last_particle_added = num_particles;
 	particles[num_particles++] = particle;
+	return num_particles-1;
 }
 
 static void delete_particle(int particle)
@@ -135,6 +140,33 @@ static int get_particle_under_the_mouse()
 	}
 
 	return -1;
+}
+
+void gear_apply_motor_force(Engine engine)
+{
+    Particle *center = &particles[engine.particle_id_center];
+
+    for (int i = 0; i < engine.num_particles; i++)
+    {
+        Particle *p = &particles[engine.particles_border[i]];
+        if (!p->enabled) continue;
+
+        // Vector desde el centro a la partícula
+        ImVec2 dir = { p->position.x - center->position.x, p->position.y - center->position.y };
+
+        // Vector perpendicular (para girar)
+        ImVec2 perp = { -dir.y, dir.x };
+
+        // Normalizar
+        float len = sqrtf(perp.x * perp.x + perp.y * perp.y);
+        if (len == 0.0f) continue; // por seguridad
+        perp.x /= len;
+        perp.y /= len;
+
+        // Aplicar aceleración
+        p->acceleration.x += perp.x * engine.strength;
+        p->acceleration.y += perp.y * engine.strength;
+    }
 }
 
 static void build_partition_grid(void)
@@ -235,8 +267,8 @@ void draw_energy_efficiency_bar(float efficiency_ratio)
 
         igDummy((ImVec2){width, height + 5});
 
-        igEnd();
     }
+	igEnd();
 }
 
 static void draw_start_stop_controls()
@@ -324,9 +356,7 @@ static bool draw_gui()
 					}
 				}
 
-				num_near_constraints = num_links = num_far_constraints = 0;
-				// last_particle_added = -1;
-				
+				num_engines = num_near_constraints = num_links = num_far_constraints = 0;
 			}
 			igSeparator();
 			if(igMenuItem_Bool("Delete Particle", "", NULL, true))
@@ -431,6 +461,24 @@ static bool draw_gui()
 			}
 			igEndMenu();
 		}
+
+		if(developer_mode)
+		{
+			if (igBeginMenu("Motors", true))
+			{
+				state = GAME_STATE_READY;
+				if (igMenuItem_Bool("Add Fixed Size Motor", "", false, true))
+				{
+					state = GAME_STATE_CREATING_FIXED_SIZE_ENGINE;
+				}
+				if (igMenuItem_Bool("Add Motor(defines size)", "", false, true))
+				{
+					state = GAME_STATE_CREATING_ENGINE;
+				}
+				igEndMenu();
+			}
+		}
+		
 
 		if (igBeginMenu("Information", true))
 		{
@@ -655,9 +703,16 @@ static void process_state_running()
 	}
 
 	constraint_user_particles_to_screen();
-	
 
 	vt_accelerate_particles(particles, num_particles, (ImVec2){0, 250.0});
+
+	for(int i = 0; i < num_engines; i++)
+	{
+		engines[i].strength = motor_torque;
+		gear_apply_motor_force(engines[i]);
+	}
+
+
 	vt_update_particles(particles, num_particles, delta_time);
 	if(!space_partitioning)
 	{
@@ -669,14 +724,26 @@ static void process_state_running()
 		enforce_collisions_using_space_partitioning();
 	}
 
+	if(developer_mode)
+	{
+		igSetNextWindowPos((ImVec2) {529,400}, ImGuiCond_FirstUseEver, (ImVec2){0, 0});
+		igSetNextWindowSize((ImVec2) {270,105}, ImGuiCond_FirstUseEver);
+		igBegin("Motor Torque", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+		igSliderFloat("Slider", &motor_torque, 25.0f, 500.0f, "%.3f", 0);
+		igEnd();
+	}
+
+
 }
 
-static void process_state_creating_fixed_size_gear(bool fixed)
+static void process_state_creating_fixed_size_gear(bool fixed, bool is_engine)
 {
 	ImVec2 mouse_pos;
 	igGetMousePos(&mouse_pos);
 	static GenericSubstateEnum creatingParticleState = SUBSTATE_READY;
 	static ImVec2 center;
+
+	Engine engine = {.strength = 250., .num_particles = 0};
 
 	static float radious = 60;
 	{
@@ -684,7 +751,6 @@ static void process_state_creating_fixed_size_gear(bool fixed)
 		igSetNextWindowPos((ImVec2) {529,400}, ImGuiCond_FirstUseEver, (ImVec2){0, 0});
 		igSetNextWindowSize((ImVec2) {270,105}, ImGuiCond_FirstUseEver);
 		igBegin("Generator Size", &open, ImGuiWindowFlags_AlwaysAutoResize);
-		igText(":");
 		igSliderFloat("Slider", &radious, 25.0f, 200.0f, "%.3f", 0);
 		igEnd();
 	}
@@ -721,8 +787,9 @@ static void process_state_creating_fixed_size_gear(bool fixed)
 
 				// center
 				Particle centerP = {center, center, {0, 0}, fixed?-1:10, 10, color_rojo};
-				add_particle(centerP, true);
 				
+				engine.particle_id_center = add_particle(centerP, true);
+
 				int center_particle_id = last_particle_added;
 
 				int sides = 6;
@@ -736,7 +803,7 @@ static void process_state_creating_fixed_size_gear(bool fixed)
 					ImVec2 particle_position = {center.x + x, center.y + y};
 
 					Particle newParticle = {particle_position, particle_position, {0, 0}, 10, 10, create_rgb_color(255, 0, 255, 255)};
-					add_particle(newParticle, true);
+					engine.particles_border[engine.num_particles++] = add_particle(newParticle, true);
 					links[num_links++] = vt_create_link_constraint(last_particle_added, center_particle_id, particles);
 					gear_teeth_ids[num_teeth++] = last_particle_added;
 				}
@@ -747,13 +814,16 @@ static void process_state_creating_fixed_size_gear(bool fixed)
 				}
 
 				links[num_links++] = vt_create_link_constraint(gear_teeth_ids[0], gear_teeth_ids[num_teeth - 1], particles);
-
+				if(is_engine)
+				{
+					engines[num_engines++] = engine;
+				}
 			}
 			break;
 	}
 }
 
-static void process_state_creating_gear(bool fixed)
+static void process_state_creating_gear(bool fixed, bool is_engine)
 {
 	ImVec2 mouse_pos;
 	igGetMousePos(&mouse_pos);
@@ -761,6 +831,8 @@ static void process_state_creating_gear(bool fixed)
 	static ImVec2 center;
 
 	if(igIsAnyItemActive()) return;
+
+	Engine engine = {.strength = 250., .num_particles = 0};
 
 	switch(creatingParticleState)
 	{
@@ -793,7 +865,7 @@ static void process_state_creating_gear(bool fixed)
 
 				// center
 				Particle centerP = {center, center, {0, 0}, fixed?-1:10, 10, color_rojo};
-				add_particle(centerP, true);
+				engine.particle_id_center = add_particle(centerP, true);
 				
 				int center_particle_id = last_particle_added;
 
@@ -808,7 +880,7 @@ static void process_state_creating_gear(bool fixed)
 					ImVec2 particle_position = {center.x + x, center.y + y};
 
 					Particle newParticle = {particle_position, particle_position, {0, 0}, 10, 10, color_purpura};
-					add_particle(newParticle, true);
+					engine.particles_border[engine.num_particles++] = add_particle(newParticle, true);
 					links[num_links++] = vt_create_link_constraint(last_particle_added, center_particle_id, particles);
 					gear_teeth_ids[num_teeth++] = last_particle_added;
 				}
@@ -819,7 +891,10 @@ static void process_state_creating_gear(bool fixed)
 				}
 
 				links[num_links++] = vt_create_link_constraint(gear_teeth_ids[0], gear_teeth_ids[num_teeth - 1], particles);
-
+				if(is_engine)
+				{
+					engines[num_engines++] = engine;
+				}
 			}
 			break;
 	}
@@ -1173,10 +1248,16 @@ static bool update()
 			process_state_creating_fixed_particle();
 			break;
 		case GAME_STATE_CREATING_FIXED_SIZE_GEAR:
-			process_state_creating_fixed_size_gear(fixed_generators);
+			process_state_creating_fixed_size_gear(fixed_generators, false);
 			break;
 		case GAME_STATE_CREATING_GEAR:
-			process_state_creating_gear(fixed_generators);
+			process_state_creating_gear(fixed_generators, false);
+			break;
+		case GAME_STATE_CREATING_FIXED_SIZE_ENGINE:
+			process_state_creating_fixed_size_gear(fixed_generators, true);
+			break;
+		case GAME_STATE_CREATING_ENGINE:
+			process_state_creating_gear(fixed_generators, true);
 			break;
 			case GAME_STATE_CREATING_STANDARD_PARTICLE:
 			process_state_creating_standard_particle();

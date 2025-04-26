@@ -20,6 +20,8 @@ typedef enum GameStateEnum
 	GAME_STATE_CREATING_PARTICLE,
 	GAME_STATE_CREATING_FIXED_SIZE_GEAR,
 	GAME_STATE_CREATING_GEAR,
+	GAME_STATE_CREATING_FIXED_SIZE_ENGINE,
+	GAME_STATE_CREATING_ENGINE,
 	GAME_STATE_CREATING_FIXED_PARTICLE,
 	GAME_STATE_CREATING_STANDARD_PARTICLE,
 	GAME_STATE_CREATING_NEAR_CONSTRAINT,
@@ -35,6 +37,14 @@ typedef enum GenericSubstateEnum
 	SUBSTATE_READY,
 	SUBSTATE_DRAWING
 } GenericSubstateEnum;
+
+typedef struct Engine
+{
+	int particle_id_center;
+	int particles_border[6];
+	float strength;
+	int num_particles;
+} Engine;
 
 Game create_game();
 
