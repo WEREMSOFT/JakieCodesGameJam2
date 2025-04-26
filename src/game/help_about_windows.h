@@ -1,14 +1,14 @@
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #include <cimgui.h>
 #include <cimgui_impl.h>
-// #include "sound.h"
+#include "sound.h"
 
 extern bool show_about_window;
 extern bool show_how_to_play_window;
 
 extern bool show_energy_window;
 extern bool show_emisor_properties_window;
-// extern Sound sound;
+extern Sound sound;
 
 void draw_about_window() {
     if (!show_about_window)
@@ -64,7 +64,7 @@ void draw_how_to_play_window() {
         "- FIXED PARTICLES are frozen in place and used as anchor points to build stable structures.\n\n"
 
         "The energy collected by the generators fuels the plasma globe in the background. You can customize "
-        "the emitted particles’ properties (mass, radius, velocity) to influence how efficiently energy is captured.\n\n"
+        "the emitted particles properties (mass, radius, velocity) to influence how efficiently energy is captured.\n\n"
 
         "Be careful: too many particles—or particles with high energy—can bounce around chaotically, slowing down the generators’ efficiency.\n\n"
 
@@ -86,9 +86,9 @@ void draw_how_to_play_window() {
 		if(first_show)
 		{
 			first_show = false;
-			// sound = soundCreate();
-			// Soloud_setGlobalVolume(sound.soloud, 1.);
-			// soundPlaySpeech(sound, SPEECH_WELLCOME);
+			sound = soundCreate();
+			Soloud_setGlobalVolume(sound.soloud, 1.);
+			soundPlaySpeech(sound, SPEECH_WELLCOME);
 		}
     }
 

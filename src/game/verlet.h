@@ -12,6 +12,7 @@ typedef struct Particle
 	float mass, radious;
 	ImU32 color;
 	bool enabled;
+	bool user_created;
 } Particle;
 
 typedef struct UnidirectionalConstraint

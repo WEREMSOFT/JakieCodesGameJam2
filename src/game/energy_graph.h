@@ -7,37 +7,43 @@ typedef struct EnergyOutput
 	float free_particles;
 } EnergyOutput;
 
+static float calculate_angle(ImVec2 from, ImVec2 to) {
+    return atan2f(to.y - from.y, to.x - from.x);
+}
+
 EnergyOutput calculate_kinetic_energy(Particle* particles, LinkConstraint* constraints, int numParticles, int numConstraints, float deltaT) {
     EnergyOutput returnValue = {0};
 
-    // Calcular la energía cinética de las partículas no linkeadas y las linkeadas
-    for (int i = 0; i < numParticles; i++) {
-		if(!particles[i].enabled) continue;
-        // Calcular la velocidad
-        ImVec2 velocity = {particles[i].position.x - particles[i].prevPosition.x, 
-                           particles[i].position.y - particles[i].prevPosition.y};
-        float speed = sqrtf(velocity.x * velocity.x + velocity.y * velocity.y);
+    int* linkCount = (int*)calloc(numParticles, sizeof(int));
+    if (!linkCount) return returnValue;
 
-        // Energía cinética = 1/2 * masa * velocidad^2
-        float kineticEnergy = 0.5f * particles[i].mass * speed * speed;
-
-        // Verificar si la partícula está linkeada
-        bool isLinked = false;
-        for (int j = 0; j < numConstraints; j++) {
-            if (constraints[j].particleA == i || constraints[j].particleB == i) {
-                isLinked = true;
-                break;
-            }
-        }
-
-        if (isLinked) {
-            // Sumar a la energía de las partículas linkeadas
-            returnValue.linked_particles += kineticEnergy;
-        } else {
-            // Sumar a la energía de las partículas no linkeadas
-            returnValue.free_particles += kineticEnergy;
+    for (int i = 0; i < numConstraints; i++) {
+        if (constraints[i].enabled) {
+            if (constraints[i].particleA >= 0 && constraints[i].particleA < numParticles)
+                linkCount[constraints[i].particleA]++;
+            if (constraints[i].particleB >= 0 && constraints[i].particleB < numParticles)
+                linkCount[constraints[i].particleB]++;
         }
     }
+
+    for (int i = 0; i < numParticles; i++) {
+        if (!particles[i].enabled) continue;
+
+        ImVec2 velocity = {
+            particles[i].position.x - particles[i].prevPosition.x,
+            particles[i].position.y - particles[i].prevPosition.y
+        };
+        float speed = sqrtf(velocity.x * velocity.x + velocity.y * velocity.y);
+        float kineticEnergy = 0.5f * particles[i].mass * speed * speed;
+
+        if (linkCount[i] == 0) {
+            returnValue.free_particles += kineticEnergy;
+        } else {
+            returnValue.linked_particles += kineticEnergy / (float)linkCount[i];
+        }
+    }
+
+    free(linkCount);
 
     return returnValue;
 }
