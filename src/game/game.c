@@ -524,14 +524,15 @@ static bool draw_gui()
 
 		EnergyOutput eo = calculate_kinetic_energy(particles, links, num_particles, num_links, ioptr->DeltaTime);
 
-		if(eo.linked_particles / eo.free_particles > .6 && !already_won)
+		if(eo.linked_particles / eo.free_particles > .6 && !already_won && !developer_mode)
 		{
 			soundPlaySpeech(sound, SPEECH_YOU_WIN);
 			already_won = true;
 			state = GAME_STATE_WON;
 		}
 
-		draw_energy_efficiency_bar(eo.linked_particles / eo.free_particles);
+		if(!developer_mode)
+			draw_energy_efficiency_bar(eo.linked_particles / eo.free_particles);
 
 		if(show_emisor_properties_window && !show_how_to_play_window)
 		{
@@ -546,10 +547,8 @@ static bool draw_gui()
 			igSliderFloat("Particle Size", &particle_emissor_base_radious, 2.0f, 50.0f, "%.3f", 0);
 			igEnd();
 		}
-		draw_how_to_play_window();
-		draw_about_window();
-		draw_start_stop_controls();
 	}
+	draw_start_stop_controls();
 }
 
 static SpacePartitionCell create_mega_cell(int celX, int celY)
@@ -1232,7 +1231,11 @@ static bool update()
 
 	draw_background_effects(state == GAME_STATE_RUNNING?ioptr->DeltaTime:0);
 
-	draw_gui();
+	if(!show_how_to_play_window)
+		draw_gui();
+
+	draw_how_to_play_window();
+	draw_about_window();
 
 	switch (state)
 	{
@@ -1281,6 +1284,7 @@ static bool update()
 
 	if(draw_part_grid)
 		draw_partition_grid();
+	
 	draw_near_constraints();
 	draw_far_constraints();
 	draw_particles();
