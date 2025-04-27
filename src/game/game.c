@@ -77,11 +77,12 @@ GameStateEnum state = GAME_STATE_RUNNING;
 ImDrawList *draw_list;
 ImVec2 screen_size = {};
 #define MAX_LEVEL_TEXT 1000000
-static char levelTextBuffer[MAX_LEVEL_TEXT] = "";
+static char level_text_buffer[MAX_LEVEL_TEXT] = "";
 
 static SpacePartitionCell space_partition_grid[50][50] = {0};
 
-int cellSize = 20;
+int cell_size = 20;
+int snap_grid_cell_size  = 20;
 
 EnergyOutput energy_output = {0.000001, 0.000001};
 
@@ -98,12 +99,27 @@ bool show_how_to_play_window = true;
 bool show_about_window = false;
 bool developer_mode = false;
 bool already_won = false;
+bool snap_to_grid = true;
+bool draw_snap_grid = false;
 
 float motor_torque = 250.;
 
 ImVec2 particle_emissor_initial_velocity = { -3., 0 };
 float particle_emissor_base_radious = 6.5;
 ImVec2 emissor_position = {0};
+ImVec2 mouse_pos = {0};
+ImVec2 mouse_pos_unsnapped = {0};
+
+void update_mouse_pos()
+{
+	igGetMousePos(&mouse_pos);
+	mouse_pos_unsnapped = mouse_pos;
+	if(snap_to_grid)
+	{
+		mouse_pos.x -= (int)mouse_pos.x % snap_grid_cell_size;
+		mouse_pos.y -= (int)mouse_pos.y % snap_grid_cell_size;
+	}
+}
 
 static int add_particle(Particle particle, bool user_created)
 {
@@ -129,13 +145,10 @@ static void delete_particle(int particle)
 
 static int get_particle_under_the_mouse()
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
-
 	for(int i = 0; i < num_particles; i++)
 	{
 		if(!particles[i].enabled) continue;
-		float dist = ig_vec2_length(ig_vec2_diff(particles[i].position, mouse_pos));
+		float dist = ig_vec2_length(ig_vec2_diff(particles[i].position, mouse_pos_unsnapped));
 		if(dist < particles[i].radious) return i;
 	}
 
@@ -151,19 +164,15 @@ void gear_apply_motor_force(Engine engine)
         Particle *p = &particles[engine.particles_border[i]];
         if (!p->enabled) continue;
 
-        // Vector desde el centro a la partícula
         ImVec2 dir = { p->position.x - center->position.x, p->position.y - center->position.y };
 
-        // Vector perpendicular (para girar)
         ImVec2 perp = { -dir.y, dir.x };
 
-        // Normalizar
         float len = sqrtf(perp.x * perp.x + perp.y * perp.y);
-        if (len == 0.0f) continue; // por seguridad
+        if (len == 0.0f) continue;
         perp.x /= len;
         perp.y /= len;
 
-        // Aplicar aceleración
         p->acceleration.x += perp.x * engine.strength;
         p->acceleration.y += perp.y * engine.strength;
     }
@@ -171,8 +180,8 @@ void gear_apply_motor_force(Engine engine)
 
 static void build_partition_grid(void)
 {
-	int matrixWidth = screen_size.x / cellSize;
-	int matrixHeight = screen_size.y / cellSize;
+	int matrix_width = screen_size.x / cell_size;
+	int matrix_height = screen_size.y / cell_size;
 
 	for (int p = 0; p < num_particles; p++)
 	{
@@ -180,10 +189,10 @@ static void build_partition_grid(void)
 
 		if(!particle.enabled) continue;
 
-		int i = (int)(particle.position.x / cellSize);
-		int j = (int)(particle.position.y / cellSize);
+		int i = (int)(particle.position.x / cell_size);
+		int j = (int)(particle.position.y / cell_size);
 
-		if (i >= 0 && i < matrixWidth && j >= 0 && j < matrixHeight)
+		if (i >= 0 && i < matrix_width && j >= 0 && j < matrix_height)
 		{
 			SpacePartitionCell* cell = &space_partition_grid[i][j];
 			cell->particles[cell->particleCount++] = p;
@@ -199,8 +208,8 @@ static void reset_partition_grid()
 static void import_game(void)
 {
 	#ifdef __EMSCRIPTEN__
-	load_level_from_url(levelTextBuffer, MAX_LEVEL_TEXT);
-	if(deserialize_level(levelTextBuffer) > -1)
+	load_level_from_url(level_text_buffer, MAX_LEVEL_TEXT);
+	if(deserialize_level(level_text_buffer) > -1)
 	{
 		already_won = true;
 	}
@@ -228,8 +237,8 @@ static void export_game(void)
 {
 	#ifdef __EMSCRIPTEN__
 	clear_output_console();
-	serialize_level(levelTextBuffer, MAX_LEVEL_TEXT);
-	save_level_to_url(levelTextBuffer);
+	serialize_level(level_text_buffer, MAX_LEVEL_TEXT);
+	save_level_to_url(level_text_buffer);
 	#endif
 	
 }
@@ -273,10 +282,9 @@ void draw_energy_efficiency_bar(float efficiency_ratio)
 
 static void draw_start_stop_controls()
 {
-	igSetNextWindowPos((ImVec2){265,546}, ImGuiCond_FirstUseEver, (ImVec2){0, 0});
+	igSetNextWindowPos((ImVec2){265,523}, ImGuiCond_FirstUseEver, (ImVec2){0, 0});
 
 	igBegin("Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
-
 
 	if (igButton("Run", (ImVec2){0, 0}))
 	{
@@ -325,14 +333,36 @@ static void draw_start_stop_controls()
 		soundPlaySfx(sound, SFX_COIN);
 		state = GAME_STATE_CREATING_NEAR_CONSTRAINT;
 	}
+	igCheckbox("Static Generators", &fixed_generators);
 	igSameLine(0.0f, -1.0f);
-	igCheckbox("Generators Are Static", &fixed_generators);
-
+	igCheckbox("Shap To Grid", &snap_to_grid);
+	igSameLine(0.0f, -1.0f);
+	igCheckbox("Draw Snap Grid", &draw_snap_grid);
+	igSameLine(0.0f, -1.0f);
+	igCheckbox("Plasma Ball", &draw_plasma_ball_bool);
 	igEnd();
+}
+
+static void draw_grid()
+{
+	int matrix_width = screen_size.x / snap_grid_cell_size;
+	int matrix_height = screen_size.y / snap_grid_cell_size;
+	
+	for (int i = 0; i < matrix_width; i++)
+	{
+		for (int j = 0; j < matrix_height; j++)
+		{
+			ImDrawList_AddRect(draw_list, (ImVec2){i * snap_grid_cell_size, j * snap_grid_cell_size}, (ImVec2){i * snap_grid_cell_size + snap_grid_cell_size, j * snap_grid_cell_size + snap_grid_cell_size}, color_gray_alpha, 0, 0,  1);
+		}
+	}
+
 }
 
 static bool draw_gui()
 {
+	if(draw_snap_grid)
+		draw_grid();
+
 	if (igBeginMainMenuBar())
 	{
 		if (igBeginMenu("Edit", true))
@@ -365,6 +395,8 @@ static bool draw_gui()
 				state = GAME_STATE_DELETE_PARTICLE;
 			}
 			igSeparator();
+			if (igMenuItem_BoolPtr("Snap To Grid", "", &snap_to_grid, true));
+			igSeparator();
 			if (igMenuItem_BoolPtr("Draw Plasma Ball", "", &draw_plasma_ball_bool, true));
 			if (igMenuItem_BoolPtr("Draw StarField", "", &draw_starfield, true));
 			igSeparator();
@@ -390,7 +422,7 @@ static bool draw_gui()
 				if (igMenuItem_Bool("Get Console Text", "", false, true))
 				{
 					clear_output_console();
-					printf("\n##########\n%s\n", get_console_text(levelTextBuffer));
+					printf("\n##########\n%s\n", get_console_text(level_text_buffer));
 				}
 	
 				igSeparator();
@@ -526,7 +558,7 @@ static bool draw_gui()
 
 		if(eo.linked_particles / eo.free_particles > .6 && !already_won && !developer_mode)
 		{
-			soundPlaySpeech(sound, SPEECH_YOU_WIN);
+			sound_play_speech(sound, SPEECH_YOU_WIN);
 			already_won = true;
 			state = GAME_STATE_WON;
 		}
@@ -553,7 +585,7 @@ static bool draw_gui()
 
 static SpacePartitionCell create_mega_cell(int celX, int celY)
 {
-	SpacePartitionCell megaCell = {0};
+	SpacePartitionCell mega_cell = {0};
 	for(int j = celY - 1; j <= celY + 1; j++)
 	{
 		for(int i = celX - 1; i <= celX + 1; i++)
@@ -561,11 +593,11 @@ static SpacePartitionCell create_mega_cell(int celX, int celY)
 			SpacePartitionCell cell = space_partition_grid[i][j];
 			for(int k = 0; k < cell.particleCount; k++)
 			{
-				megaCell.particles[megaCell.particleCount++] =  cell.particles[k];
+				mega_cell.particles[mega_cell.particleCount++] =  cell.particles[k];
 			}
 		}
 	}
-	return megaCell;
+	return mega_cell;
 }
 
 static void delete_offscreen_particles()
@@ -594,14 +626,14 @@ static void constraint_user_particles_to_screen()
 		particles[i].position.x = MIN(MAX(5 + particles[i].radious, particles[i].position.x), screen_size.x - 5 - particles[i].radious);
 
 		if(prevx != particles[i].position.x)
-			particles[i].prevPosition.x = particles[i].position.x;
+			particles[i].prev_position.x = particles[i].position.x;
 
 
 		float prevy = particles[i].position.y;	
 		particles[i].position.y = MIN(MAX(5 + particles[i].radious, particles[i].position.y), screen_size.y - 5 - particles[i].radious);
 
 		if(prevy != particles[i].position.y)
-			particles[i].prevPosition.y = particles[i].position.y;
+			particles[i].prev_position.y = particles[i].position.y;
 	}
 }
 
@@ -614,28 +646,28 @@ static void constraint_particles_to_screen()
 		particles[i].position.x = MIN(MAX(5 + particles[i].radious, particles[i].position.x), screen_size.x - 5 - particles[i].radious);
 
 		if(prevx != particles[i].position.x)
-			particles[i].prevPosition.x = particles[i].position.x;
+			particles[i].prev_position.x = particles[i].position.x;
 
 
 		float prevy = particles[i].position.y;	
 		particles[i].position.y = MIN(MAX(5 + particles[i].radious, particles[i].position.y), screen_size.y - 5 - particles[i].radious);
 
 		if(prevy != particles[i].position.y)
-			particles[i].prevPosition.y = particles[i].position.y;
+			particles[i].prev_position.y = particles[i].position.y;
 	}
 }
 
 static void enforce_collisions_using_space_partitioning()
 {
-	int matrixWidth = screen_size.x / cellSize;
-	int matrixHeight = screen_size.y / cellSize;
+	int matrix_width = screen_size.x / cell_size;
+	int matrix_height = screen_size.y / cell_size;
 	
 	reset_partition_grid();
 	build_partition_grid();
 
-	for (int i = 0; i < matrixWidth; i++)
+	for (int i = 0; i < matrix_width; i++)
 	{
-		for (int j = 0; j < matrixHeight; j++)
+		for (int j = 0; j < matrix_height; j++)
 		{
 			SpacePartitionCell *cell = &space_partition_grid[i][j];
 
@@ -649,7 +681,7 @@ static void enforce_collisions_using_space_partitioning()
 				int ni = i + neighbors[n][0];
 				int nj = j + neighbors[n][1];
 
-				if (ni >= matrixWidth || nj >= matrixHeight)
+				if (ni >= matrix_width || nj >= matrix_height)
 					continue;
 
 				SpacePartitionCell *neighbor = &space_partition_grid[ni][nj];
@@ -670,9 +702,6 @@ static void enforce_collisions_using_space_partitioning()
 
 static void process_state_running()
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
-
 	float delta_time = igGetIO()->DeltaTime;
 	
 	update_energy_display(particles, links, num_particles, num_links, delta_time);
@@ -692,7 +721,7 @@ static void process_state_running()
 	if(last_particle_added == -1 || (ig_vec2_length(ig_vec2_diff(particles[last_particle_added].position, emissor_position)) > particles[last_particle_added].radious * 2 && (num_particles - num_free_particles) < MAX_PARTICLES && inject_particles))
 	{
 		float rad = particle_emissor_base_radious + sin(elapsed_time);
-		Particle new_particle = {emissor_position, {emissor_position.x + particle_emissor_initial_velocity.x * delta_time, emissor_position.y - particle_emissor_initial_velocity.y * delta_time}, {0, 0}, rad, rad, color_verde};
+		Particle new_particle = {emissor_position, {emissor_position.x + particle_emissor_initial_velocity.x * delta_time, emissor_position.y - particle_emissor_initial_velocity.y * delta_time}, {0, 0}, rad, rad, color_green};
 		add_particle(new_particle, false);
 	}
 	
@@ -737,9 +766,7 @@ static void process_state_running()
 
 static void process_state_creating_fixed_size_gear(bool fixed, bool is_engine)
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
-	static GenericSubstateEnum creatingParticleState = SUBSTATE_READY;
+	static GenericSubstateEnum creating_particle_state = SUBSTATE_READY;
 	static ImVec2 center;
 
 	Engine engine = {.strength = 250., .num_particles = 0};
@@ -756,27 +783,21 @@ static void process_state_creating_fixed_size_gear(bool fixed, bool is_engine)
 	
 	if(igIsAnyItemActive()) return;
 
-	switch(creatingParticleState)
+	switch(creating_particle_state)
 	{
 		case SUBSTATE_READY:
 			if(igIsMouseClicked_Bool(ImGuiMouseButton_Left, false))
 			{
-				creatingParticleState = SUBSTATE_DRAWING;
-				center = mouse_pos;
+				creating_particle_state = SUBSTATE_DRAWING;
 			}
 			break;
 		case SUBSTATE_DRAWING:
 			if(igIsMouseDown_Nil(ImGuiMouseButton_Left))
 			{
-				ImDrawList_AddCircle(draw_list, mouse_pos, radious, color_rojo, PARTICLE_FACES, 1);
+				ImDrawList_AddCircle(draw_list, mouse_pos, radious, color_red, PARTICLE_FACES, 1);
 			} else 
 			{
-				creatingParticleState = SUBSTATE_READY;
-				if(radious < 2)
-				{
-					soundPlaySfx(sound, SFX_HURT);
-					return;
-				}
+				creating_particle_state = SUBSTATE_READY;
 				soundPlaySfx(sound, SFX_COIN);
 				center = mouse_pos;
 
@@ -785,7 +806,7 @@ static void process_state_creating_fixed_size_gear(bool fixed, bool is_engine)
 				int gear_teeth_ids[gear_teeth_max];
 
 				// center
-				Particle centerP = {center, center, {0, 0}, fixed?-1:10, 10, color_rojo};
+				Particle centerP = {center, center, {0, 0}, fixed?-1:10, 10, color_red};
 				
 				engine.particle_id_center = add_particle(centerP, true);
 
@@ -801,8 +822,8 @@ static void process_state_creating_fixed_size_gear(bool fixed, bool is_engine)
 			
 					ImVec2 particle_position = {center.x + x, center.y + y};
 
-					Particle newParticle = {particle_position, particle_position, {0, 0}, 10, 10, create_rgb_color(255, 0, 255, 255)};
-					engine.particles_border[engine.num_particles++] = add_particle(newParticle, true);
+					Particle new_particle = {particle_position, particle_position, {0, 0}, 10, 10, create_rgb_color(255, 0, 255, 255)};
+					engine.particles_border[engine.num_particles++] = add_particle(new_particle, true);
 					links[num_links++] = vt_create_link_constraint(last_particle_added, center_particle_id, particles);
 					gear_teeth_ids[num_teeth++] = last_particle_added;
 				}
@@ -824,21 +845,19 @@ static void process_state_creating_fixed_size_gear(bool fixed, bool is_engine)
 
 static void process_state_creating_gear(bool fixed, bool is_engine)
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
-	static GenericSubstateEnum creatingParticleState = SUBSTATE_READY;
+	static GenericSubstateEnum creating_particle_state = SUBSTATE_READY;
 	static ImVec2 center;
 
 	if(igIsAnyItemActive()) return;
 
 	Engine engine = {.strength = 250., .num_particles = 0};
 
-	switch(creatingParticleState)
+	switch(creating_particle_state)
 	{
 		case SUBSTATE_READY:
 			if(igIsMouseClicked_Bool(ImGuiMouseButton_Left, false))
 			{
-				creatingParticleState = SUBSTATE_DRAWING;
+				creating_particle_state = SUBSTATE_DRAWING;
 				center = mouse_pos;
 				soundPlaySfx(sound, SFX_JUMP);
 			}
@@ -847,10 +866,10 @@ static void process_state_creating_gear(bool fixed, bool is_engine)
 			float radious = ig_vec2_length(ig_vec2_diff(center, mouse_pos));
 			if(igIsMouseDown_Nil(ImGuiMouseButton_Left))
 			{
-				ImDrawList_AddCircle(draw_list, center, radious, color_rojo, PARTICLE_FACES, 1);
+				ImDrawList_AddCircle(draw_list, center, radious, color_red, PARTICLE_FACES, 1);
 			} else 
 			{
-				creatingParticleState = SUBSTATE_READY;
+				creating_particle_state = SUBSTATE_READY;
 				if(radious < 2)
 				{
 					soundPlaySfx(sound, SFX_HURT);
@@ -863,7 +882,7 @@ static void process_state_creating_gear(bool fixed, bool is_engine)
 				int gear_teeth_ids[gear_teeth_max];
 
 				// center
-				Particle centerP = {center, center, {0, 0}, fixed?-1:10, 10, color_rojo};
+				Particle centerP = {center, center, {0, 0}, fixed?-1:10, 10, color_red};
 				engine.particle_id_center = add_particle(centerP, true);
 				
 				int center_particle_id = last_particle_added;
@@ -878,8 +897,8 @@ static void process_state_creating_gear(bool fixed, bool is_engine)
 			
 					ImVec2 particle_position = {center.x + x, center.y + y};
 
-					Particle newParticle = {particle_position, particle_position, {0, 0}, 10, 10, color_purpura};
-					engine.particles_border[engine.num_particles++] = add_particle(newParticle, true);
+					Particle new_particle = {particle_position, particle_position, {0, 0}, 10, 10, color_purple};
+					engine.particles_border[engine.num_particles++] = add_particle(new_particle, true);
 					links[num_links++] = vt_create_link_constraint(last_particle_added, center_particle_id, particles);
 					gear_teeth_ids[num_teeth++] = last_particle_added;
 				}
@@ -901,19 +920,17 @@ static void process_state_creating_gear(bool fixed, bool is_engine)
 
 static void process_state_creating_fixed_particle(void)
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
-	static GenericSubstateEnum creatingParticleState = SUBSTATE_READY;
+	static GenericSubstateEnum creating_particle_state = SUBSTATE_READY;
 	static ImVec2 center;
 
 	if(igIsAnyItemActive()) return;
 
-	switch(creatingParticleState)
+	switch(creating_particle_state)
 	{
 		case SUBSTATE_READY:
 			if(igIsMouseClicked_Bool(ImGuiMouseButton_Left, false))
 			{
-				creatingParticleState = SUBSTATE_DRAWING;
+				creating_particle_state = SUBSTATE_DRAWING;
 				center = mouse_pos;
 			}
 			break;
@@ -921,14 +938,14 @@ static void process_state_creating_fixed_particle(void)
 			float radious = ig_vec2_length(ig_vec2_diff(center, mouse_pos));
 			if(igIsMouseDown_Nil(ImGuiMouseButton_Left))
 			{
-				ImDrawList_AddCircle(draw_list, center, radious, color_rojo, PARTICLE_FACES, 1);
+				ImDrawList_AddCircle(draw_list, center, radious, color_red, PARTICLE_FACES, 1);
 			} else 
 			{
 				soundPlaySfx(sound, SFX_COIN);
-				creatingParticleState = SUBSTATE_READY;
+				creating_particle_state = SUBSTATE_READY;
 				if(radious < 2) return;
-				Particle newParticle = {center, center, {0, 0}, -1, radious, color_rojo};
-				add_particle(newParticle, true);
+				Particle new_particle = {center, center, {0, 0}, -1, radious, color_red};
+				add_particle(new_particle, true);
 			}
 			break;
 	}
@@ -936,19 +953,17 @@ static void process_state_creating_fixed_particle(void)
 
 static void process_state_creating_particle(void)
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
-	static GenericSubstateEnum creatingParticleState = SUBSTATE_READY;
+	static GenericSubstateEnum creating_particle_state = SUBSTATE_READY;
 	static ImVec2 center;
 
 	if(igIsAnyItemActive()) return;
 
-	switch(creatingParticleState)
+	switch(creating_particle_state)
 	{
 		case SUBSTATE_READY:
 			if(igIsMouseClicked_Bool(ImGuiMouseButton_Left, false))
 			{
-				creatingParticleState = SUBSTATE_DRAWING;
+				creating_particle_state = SUBSTATE_DRAWING;
 				center = mouse_pos;
 				soundPlaySfx(sound, SFX_JUMP);
 			}
@@ -957,14 +972,14 @@ static void process_state_creating_particle(void)
 			float radious = ig_vec2_length(ig_vec2_diff(center, mouse_pos));
 			if(igIsMouseDown_Nil(ImGuiMouseButton_Left))
 			{
-				ImDrawList_AddCircle(draw_list, center, radious, color_rojo, PARTICLE_FACES, 1);
+				ImDrawList_AddCircle(draw_list, center, radious, color_red, PARTICLE_FACES, 1);
 			} else 
 			{
 				soundPlaySfx(sound, SFX_COIN);
-				creatingParticleState = SUBSTATE_READY;
+				creating_particle_state = SUBSTATE_READY;
 				if(radious < 2) return;
-				Particle newParticle = {center, center, {0, 0}, radious, radious, color_verde};
-				add_particle(newParticle, true);
+				Particle new_particle = {center, center, {0, 0}, radious, radious, color_green};
+				add_particle(new_particle, true);
 			}
 			break;
 	}
@@ -972,19 +987,17 @@ static void process_state_creating_particle(void)
 
 static void process_state_creating_standard_particle(void)
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
-	static GenericSubstateEnum creatingParticleState = SUBSTATE_READY;
+	static GenericSubstateEnum creating_particle_state = SUBSTATE_READY;
 	static ImVec2 center;
 
 	if(igIsAnyItemActive()) return;
 
-	switch(creatingParticleState)
+	switch(creating_particle_state)
 	{
 		case SUBSTATE_READY:
 			if(igIsMouseClicked_Bool(ImGuiMouseButton_Left, false))
 			{
-				creatingParticleState = SUBSTATE_DRAWING;
+				creating_particle_state = SUBSTATE_DRAWING;
 				center = mouse_pos;
 			}
 			break;
@@ -992,13 +1005,13 @@ static void process_state_creating_standard_particle(void)
 			float radious = ig_vec2_length(ig_vec2_diff(center, mouse_pos));
 			if(igIsMouseDown_Nil(ImGuiMouseButton_Left))
 			{
-				ImDrawList_AddCircle(draw_list, mouse_pos, 10, color_rojo, PARTICLE_FACES, 1);
+				ImDrawList_AddCircle(draw_list, mouse_pos, 10, color_red, PARTICLE_FACES, 1);
 			} else 
 			{
 				soundPlaySfx(sound, SFX_COIN);
-				creatingParticleState = SUBSTATE_READY;
-				Particle newParticle = {mouse_pos, mouse_pos, {0, 0}, 10, 10, color_verde};
-				add_particle(newParticle, true);
+				creating_particle_state = SUBSTATE_READY;
+				Particle new_particle = {mouse_pos, mouse_pos, {0, 0}, 10, 10, color_green};
+				add_particle(new_particle, true);
 			}
 			break;
 	}
@@ -1017,7 +1030,7 @@ static void draw_near_constraints()
 {
 	for(int i = 0; i < num_near_constraints; i++)
 	{
-		ImDrawList_AddCircle(draw_list, near_constraints[i].center, near_constraints[i].length, color_amarillo, CONSTRAINT_FACES, 1);
+		ImDrawList_AddCircle(draw_list, near_constraints[i].center, near_constraints[i].length, color_yellow, CONSTRAINT_FACES, 1);
 	}
 }
 
@@ -1025,14 +1038,12 @@ static void draw_far_constraints()
 {
 	for(int i = 0; i < num_far_constraints; i++)
 	{
-		ImDrawList_AddCircle(draw_list, far_constraints[i].center, far_constraints[i].length, color_rojo, CONSTRAINT_FACES, 1);
+		ImDrawList_AddCircle(draw_list, far_constraints[i].center, far_constraints[i].length, color_red, CONSTRAINT_FACES, 1);
 	}
 }
 
 static void process_state_creating_near_constraint()
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
 	static GenericSubstateEnum creatingNearConstraintState = SUBSTATE_READY;
 	static ImVec2 center;
 
@@ -1052,7 +1063,7 @@ static void process_state_creating_near_constraint()
 			float radious = ig_vec2_length(ig_vec2_diff(center, mouse_pos));
 			if(igIsMouseDown_Nil(ImGuiMouseButton_Left))
 			{
-				ImDrawList_AddCircle(draw_list, center, radious, color_rojo, CONSTRAINT_FACES, 1);
+				ImDrawList_AddCircle(draw_list, center, radious, color_red, CONSTRAINT_FACES, 1);
 			} else 
 			{
 				soundPlaySfx(sound, SFX_COIN);
@@ -1067,8 +1078,6 @@ static void process_state_creating_near_constraint()
 
 static void process_state_creating_far_constraint()
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
 	static GenericSubstateEnum creatingFarConstraintState = SUBSTATE_READY;
 	static ImVec2 center;
 
@@ -1087,7 +1096,7 @@ static void process_state_creating_far_constraint()
 			float radious = ig_vec2_length(ig_vec2_diff(center, mouse_pos));
 			if(igIsMouseDown_Nil(ImGuiMouseButton_Left))
 			{
-				ImDrawList_AddCircle(draw_list, center, radious, color_rojo, CONSTRAINT_FACES, 1);
+				ImDrawList_AddCircle(draw_list, center, radious, color_red, CONSTRAINT_FACES, 1);
 			} else 
 			{
 				creatingFarConstraintState = SUBSTATE_READY;
@@ -1104,7 +1113,7 @@ void draw_link_constraints()
 	for(int i = 0; i < num_links; i++)
 	{
 		if(!links[i].enabled) continue;
-		ImDrawList_AddLine(draw_list, particles[links[i].particleA].position, particles[links[i].particleB].position, color_gris, 2);
+		ImDrawList_AddLine(draw_list, particles[links[i].particleA].position, particles[links[i].particleB].position, color_gray, 2);
 	}
 }
 
@@ -1117,8 +1126,6 @@ void highlight_particle(int particle_index)
 
 void process_state_deleting_particle()
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
 	static GenericSubstateEnum subState = SUBSTATE_READY;
 	static ImVec2 center;
 	static int particle = -1;
@@ -1141,8 +1148,6 @@ void process_state_deleting_particle()
 
 void process_state_creating_link_constraint()
 {
-	ImVec2 mouse_pos;
-	igGetMousePos(&mouse_pos);
 	static GenericSubstateEnum subState = SUBSTATE_READY;
 	static ImVec2 center;
 	static int particleA = -1;
@@ -1169,7 +1174,7 @@ void process_state_creating_link_constraint()
 			highlight_particle(particleB);
 			if(igIsMouseDown_Nil(ImGuiMouseButton_Left))
 			{
-				ImDrawList_AddLine(draw_list, particles[particleA].position, mouse_pos, color_rojo, 1);
+				ImDrawList_AddLine(draw_list, particles[particleA].position, mouse_pos_unsnapped, color_red, 1);
 			} else {
 				soundPlaySfx(sound, SFX_COIN);
 				links[num_links++] = vt_create_link_constraint(particleA, particleB, particles);
@@ -1181,18 +1186,18 @@ void process_state_creating_link_constraint()
 
 static void draw_partition_grid()
 {
-	int matrixWidth = screen_size.x / cellSize;
-	int matrixHeight = screen_size.y / cellSize;
+	int matrix_width = screen_size.x / cell_size;
+	int matrix_height = screen_size.y / cell_size;
 
-	for (int i = 0; i < matrixWidth; i++)
+	for (int i = 0; i < matrix_width; i++)
 	{
-		for (int j = 0; j < matrixHeight; j++)
+		for (int j = 0; j < matrix_height; j++)
 		{
 			
-			ImDrawList_AddRect(draw_list, (ImVec2){i * cellSize, j * cellSize}, (ImVec2){i * cellSize + cellSize, j * cellSize + cellSize}, color_rojo, 0, 0,  1);
+			ImDrawList_AddRect(draw_list, (ImVec2){i * cell_size, j * cell_size}, (ImVec2){i * cell_size + cell_size, j * cell_size + cell_size}, color_red, 0, 0,  1);
 			for(int k = 0; k < space_partition_grid[i][j].particleCount; k++)
 			{
-				ImDrawList_AddRectFilled(draw_list, (ImVec2){i * cellSize, j * cellSize}, (ImVec2){i * cellSize + cellSize, j * cellSize + cellSize}, create_rgb_color(255, 0, 255, 20), 0, 0);
+				ImDrawList_AddRectFilled(draw_list, (ImVec2){i * cell_size, j * cell_size}, (ImVec2){i * cell_size + cell_size, j * cell_size + cell_size}, create_rgb_color(255, 0, 255, 20), 0, 0);
 			}
 		}
 	}
@@ -1225,7 +1230,7 @@ void process_state_won()
 
 static bool update()
 {
-	
+	update_mouse_pos();
 	begin_frame();
 	draw_list = igGetBackgroundDrawList_Nil();
 

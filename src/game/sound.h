@@ -69,7 +69,7 @@ void soundPlaySfx(Sound _this, GameSFX id)
 	Soloud_play(_this.soloud, _this.sfx[id]);
 }
 
-void soundPlaySpeech(Sound _this, GameSpeech id)
+void sound_play_speech(Sound _this, GameSpeech id)
 {
 	Soloud_play(_this.soloud, _this.speechs[id]);
 }

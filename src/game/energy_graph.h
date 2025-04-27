@@ -30,8 +30,8 @@ EnergyOutput calculate_kinetic_energy(Particle* particles, LinkConstraint* const
         if (!particles[i].enabled) continue;
 
         ImVec2 velocity = {
-            particles[i].position.x - particles[i].prevPosition.x,
-            particles[i].position.y - particles[i].prevPosition.y
+            particles[i].position.x - particles[i].prev_position.x,
+            particles[i].position.y - particles[i].prev_position.y
         };
         float speed = sqrtf(velocity.x * velocity.x + velocity.y * velocity.y);
         float kineticEnergy = 0.5f * particles[i].mass * speed * speed;

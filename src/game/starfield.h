@@ -56,9 +56,9 @@ void update_and_draw_starfield(ImVec2 screen_size, float delta_time) {
             float prev_z = s->z + delta_time * star_speed;
             float px = (s->x / prev_z) * center.x + center.x;
             float py = (s->y / prev_z) * center.y + center.y;
-			ImDrawList_AddLine(draw_list, (ImVec2){px, py}, (ImVec2){sx, sy}, color_blanco, 2);
+			ImDrawList_AddLine(draw_list, (ImVec2){px, py}, (ImVec2){sx, sy}, color_white, 2);
         } else {
-            ImDrawList_AddCircleFilled(draw_list, (ImVec2){sx, sy}, 1.5f, color_blanco, 6);
+            ImDrawList_AddCircleFilled(draw_list, (ImVec2){sx, sy}, 1.5f, color_white, 6);
         }
     }
 }

@@ -8,7 +8,7 @@
 
 typedef struct Particle
 {
-	ImVec2 position, prevPosition, acceleration;
+	ImVec2 position, prev_position, acceleration;
 	float mass, radious;
 	ImU32 color;
 	bool enabled;

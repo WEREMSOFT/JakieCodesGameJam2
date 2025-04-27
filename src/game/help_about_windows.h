@@ -88,7 +88,7 @@ void draw_how_to_play_window() {
 			first_show = false;
 			sound = soundCreate();
 			Soloud_setGlobalVolume(sound.soloud, 1.);
-			soundPlaySpeech(sound, SPEECH_WELLCOME);
+			sound_play_speech(sound, SPEECH_WELLCOME);
 		}
     }
 

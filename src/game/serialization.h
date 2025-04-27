@@ -32,7 +32,7 @@ void serialize_level(char *out_buffer, size_t out_size)
                            "%d %.0f %.0f %.0f %.0f %.0f %.0f %u %d\n",
                            i,
                            p->position.x, p->position.y,
-                           p->prevPosition.x, p->prevPosition.y,
+                           p->prev_position.x, p->prev_position.y,
                            p->mass, p->radious,
                            p->color,
                            p->user_created ? 1 : 0);
@@ -144,7 +144,7 @@ int deserialize_level(const char *input)
             sscanf(buffer, "%i %f %f %f %f %f %f %u %d",
                    &index,
                    &p.position.x, &p.position.y,
-                   &p.prevPosition.x, &p.prevPosition.y,
+                   &p.prev_position.x, &p.prev_position.y,
                    &p.mass, &p.radious,
                    &p.color,
                    &user_created_int);

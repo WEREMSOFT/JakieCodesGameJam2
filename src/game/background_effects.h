@@ -45,7 +45,7 @@ void draw_lightning_branch(float cx, float cy, float angle, float length, int se
         float x2 = cx + cosf(theta) * (segment_length * i);
         float y2 = cy + sinf(theta) * (segment_length * i);
 
-		ImDrawList_AddLine(draw_list, (ImVec2){x1, y1},(ImVec2){x2, y2}, color_blanco, 3.);
+		ImDrawList_AddLine(draw_list, (ImVec2){x1, y1},(ImVec2){x2, y2}, color_white, 3.);
 
         x1 = x2;
         y1 = y2;

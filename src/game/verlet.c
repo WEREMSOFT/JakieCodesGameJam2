@@ -13,7 +13,7 @@ void vt_update_particles(Particle particles[], int particleCount, float deltaTim
 			continue;
 
 		ImVec2 currentPosition = p->position;
-		ImVec2 velocity = ig_vec2_diff(p->position, p->prevPosition);
+		ImVec2 velocity = ig_vec2_diff(p->position, p->prev_position);
 
 		float vel_scalar = ig_vec2_length(velocity);
 
@@ -22,7 +22,7 @@ void vt_update_particles(Particle particles[], int particleCount, float deltaTim
 			ig_vec2_scale(p->acceleration, dtSqr)
 		);
 
-		p->prevPosition = currentPosition;
+		p->prev_position = currentPosition;
 
 		p->acceleration = (ImVec2){0};
 	}
